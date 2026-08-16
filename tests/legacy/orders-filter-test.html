@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>FILTER-TEST</title>
+</head>
+<body>
+<pre id="o">running...</pre>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/utils/formatters.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/db.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/customers.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/suppliers.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/products.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/orders.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/payments.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/google-sheets-sync.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/components/orders-view.js"></script>
+<script>
+(async function () {
+  var out = document.getElementById('o');
+  var lines = [];
+  var failures = 0;
+  function rec(name, ok, detail) {
+    if (ok) failures = failures; else failures++;
+    lines.push((ok ? 'PASS' : 'FAIL') + ': ' + name + (ok ? '' : ' -> ' + detail));
+  }
+  window.__toasts = [];
+  window.showToast = function (m) { window.__toasts.push(String(m)); };
+  window.getUsers = window.getUsers || function () { return []; };
+  window.isAuthenticated = window.isAuthenticated || function () { return false; };
+
+  function freshState() {
+    Object.keys(window.STORAGE_KEYS).forEach(function (k) {
+      window.firestoreCache[window.STORAGE_KEYS[k]] = [];
+      localStorage.removeItem('bms_data_' + window.STORAGE_KEYS[k]);
+    });
+    window.initDB();
+  }
+
+  freshState();
+  var sup = window.createSupplier({ name: 'مورد فلتر', phone: '01000000001' });
+  var prd = window.createProduct({ name: 'منتج فلتر', code: 'F-1', purchasePrice: 100, sellingPrice: 150, stock: 50, minStock: 1, supplierId: sup.id, supplierName: sup.name });
+  var cust = window.createCustomer({ name: 'عميل الفلترة', phone: '01111111111' });
+  var cust2 = window.createCustomer({ name: 'أحمد مختار', phone: '01122222222' });
+
+  var oA = window.createOrder({ customerInfo: { name: cust.name, phone: cust.phone }, items: [{ productId: prd.id, productName: prd.name, quantity: 1, purchasePrice: 100, sellingPrice: 150 }], downPayment: 0, status: 'delivered' });
+  var oB = window.createOrder({ customerInfo: { name: cust.name, phone: cust.phone }, items: [{ productId: prd.id, productName: prd.name, quantity: 1, purchasePrice: 100, sellingPrice: 150 }], downPayment: 0, status: 'new' });
+  var oC = window.createOrder({ customerInfo: { name: cust.name, phone: cust.phone }, items: [{ productId: prd.id, productName: prd.name, quantity: 1, purchasePrice: 100, sellingPrice: 150 }], downPayment: 0, status: 'new' });
+  window.updateOrderStatus(oC.id, 'cancelled', 0);
+  var oD = window.createOrder({ customerInfo: { name: cust2.name, phone: cust2.phone }, items: [{ productId: prd.id, productName: prd.name, quantity: 1, purchasePrice: 100, sellingPrice: 150 }], downPayment: 0, status: 'delivered' });
+  window.updateOrderStatus(oD.id, 'returned', 0);
+  var oE = window.createOrder({ customerInfo: { name: cust2.name, phone: cust2.phone }, items: [{ productId: prd.id, productName: prd.name, quantity: 1, purchasePrice: 100, sellingPrice: 150 }], downPayment: 0, status: 'delivered' });
+  window.updateOrderStatus(oE.id, 'completed', 0);
+
+  var html = window.renderOrdersView();
+  var container = document.createElement('div');
+  container.innerHTML = html;
+  document.body.appendChild(container);
+
+  var statusFilter = container.querySelector('#orders-status-filter');
+  var searchInput = container.querySelector('#orders-search-input');
+  var tableBody = container.querySelector('#orders-table-body');
+  rec('F1 dropdown renders next to the search box with all status options',
+    !!statusFilter && !!searchInput &&
+    statusFilter.options.length === 6 &&
+    statusFilter.options[0].value === '' &&
+    ['new', 'delivered', 'completed', 'returned', 'cancelled'].every(function (s) {
+      return Array.prototype.some.call(statusFilter.options, function (o) { return o.value === s; });
+    }),
+    statusFilter ? 'options=' + Array.prototype.map.call(statusFilter.options, function (o) { return o.value; }).join('|') : 'missing');
+
+  window.setupOrdersEvents(container);
+
+  var rows = function () { return tableBody.querySelectorAll('tr').length; };
+  function setStatus(v) { statusFilter.value = v; statusFilter.dispatchEvent(new Event('change', { bubbles: true })); }
+  function setQuery(v) { searchInput.value = v; searchInput.dispatchEvent(new Event('input', { bubbles: true })); }
+
+  rec('F2 all statuses initially rendered (5 rows)', rows() === 5, 'rows=' + rows());
+
+  setStatus('delivered');
+  rec('F3 filter=delivered shows only delivered rows (1)', rows() === 1 && tableBody.textContent.indexOf(oA.id) !== -1, 'rows=' + rows());
+
+  setStatus('new');
+  rec('F4 filter=new shows only pending rows (1)', rows() === 1 && tableBody.textContent.indexOf(oB.id) !== -1, 'rows=' + rows());
+
+  setStatus('returned');
+  rec('F5 filter=returned shows returned row only', rows() === 1 && tableBody.textContent.indexOf(oD.id) !== -1, 'rows=' + rows());
+
+  setStatus('cancelled');
+  rec('F6 filter=cancelled shows cancelled row only', rows() === 1 && tableBody.textContent.indexOf(oC.id) !== -1, 'rows=' + rows());
+
+  setStatus('completed');
+  rec('F7 filter=completed shows completed row only', rows() === 1 && tableBody.textContent.indexOf(oE.id) !== -1, 'rows=' + rows());
+
+  setStatus('');
+  setQuery('أحمد');
+  rec('F8 search "أحمد" with no status narrows to matching customers (2: returned+completed)',
+    rows() === 2, 'rows=' + rows());
+  setQuery('');
+
+  setQuery('أحمد');
+  setStatus('completed');
+  rec('F9 combined search + status=completed yields exactly 1 row',
+    rows() === 1 && tableBody.textContent.indexOf(oE.id) !== -1, 'rows=' + rows());
+
+  setQuery('لايوجد');
+  setStatus('');
+  rec('F10 unmatched search shows the empty-state row',
+    rows() === 1 && tableBody.textContent.indexOf('لا توجد طلبات') !== -1, 'rows=' + rows() + ' txt=' + tableBody.textContent.slice(0, 40));
+
+  out.textContent = (failures === 0 ? 'ALL_PASS' : 'HAS_FAILURES') + ' | total=10 passed=' + (10 - failures) + ' failed=' + failures + '\n----\n' + lines.join('\n');
+  document.title = failures === 0 ? 'ALL_PASS' : 'HAS_FAILURES';
+})().catch(function (e) {
+  var out = document.getElementById('o');
+  out.textContent = 'TOPLEVEL_EXCEPTION: ' + (e && e.message ? e.message : String(e));
+  document.title = 'HAS_FAILURES';
+});
+</script>
+</body>
+</html>

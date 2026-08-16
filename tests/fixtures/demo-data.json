@@ -1,0 +1,591 @@
+{
+  "app": "bms",
+  "type": "full-backup",
+  "version": 1,
+  "exportedAt": "2026-08-15",
+  "collections": {
+    "customers": [
+      {
+        "id": "CUST-AHM",
+        "name": "أحمد محمد",
+        "phone": "01012345678",
+        "secondaryPhone": "",
+        "category": "عميل قطاعي / فردي",
+        "address": "ش فيصل، الجيزة",
+        "addresses": [
+          { "id": "ADDR-AHM-1", "label": "المنزل", "address": "ش فيصل، الجيزة", "isDefault": true }
+        ],
+        "notes": "عميل مواظب — يطلب قماش وسيراميك كل شهر",
+        "ordersCount": 1,
+        "totalPurchases": 4100,
+        "paid": 2000,
+        "remainingBalance": 2100,
+        "creditBalance": 0,
+        "lastOrderDate": "2026-08-01",
+        "createdAt": "2026-07-25",
+        "updatedAt": "2026-08-01"
+      },
+      {
+        "id": "CUST-SAR",
+        "name": "سارة علي",
+        "phone": "01112345678",
+        "secondaryPhone": "",
+        "category": "عميل قطاعي / فردي",
+        "address": "مدينة نصر، القاهرة",
+        "addresses": [
+          { "id": "ADDR-SAR-1", "label": "الشقة", "address": "مدينة نصر، القاهرة", "isDefault": true }
+        ],
+        "notes": "",
+        "ordersCount": 2,
+        "totalPurchases": 3280,
+        "paid": 3280,
+        "remainingBalance": 0,
+        "creditBalance": 0,
+        "lastOrderDate": "2026-08-03",
+        "createdAt": "2026-07-30",
+        "updatedAt": "2026-08-03"
+      },
+      {
+        "id": "CUST-MHA",
+        "name": "معرض الحاج حسن",
+        "phone": "01212345678",
+        "secondaryPhone": "",
+        "category": "عميل تجاري / جملة",
+        "address": "المنصورة، الدقهلية",
+        "addresses": [
+          { "id": "ADDR-MHA-1", "label": "المعرض", "address": "المنصورة، الدقهلية", "isDefault": true }
+        ],
+        "notes": "حساب آجل — تُحصَّل فواتيره على دفعات",
+        "ordersCount": 1,
+        "totalPurchases": 8000,
+        "paid": 5000,
+        "remainingBalance": 3000,
+        "creditBalance": 0,
+        "lastOrderDate": "2026-08-01",
+        "createdAt": "2026-07-20",
+        "updatedAt": "2026-08-05"
+      }
+    ],
+
+    "suppliers": [
+      {
+        "id": "SUP-TXT",
+        "name": "مصنع النسيج الحديث",
+        "phone": "01011111111",
+        "secondaryPhone": "",
+        "address": "المحلة الكبرى",
+        "notes": "توريد قماش سادة — الأسرع في الشحن المباشر",
+        "totalPurchases": 5800,
+        "paid": 2000,
+        "remainingBalance": 3800
+      },
+      {
+        "id": "SUP-SRM",
+        "name": "شركة السيراميك الوطنية",
+        "phone": "01022222222",
+        "secondaryPhone": "",
+        "address": "العاشر من رمضان",
+        "notes": "",
+        "totalPurchases": 3600,
+        "paid": 1000,
+        "remainingBalance": 2600
+      },
+      {
+        "id": "SUP-DHN",
+        "name": "دهانات النيل",
+        "phone": "01033333333",
+        "secondaryPhone": "",
+        "address": "شبرا الخيمة",
+        "notes": "أصناف البويات والدهانات",
+        "totalPurchases": 900,
+        "paid": 0,
+        "remainingBalance": 900
+      }
+    ],
+
+    "products": [
+      {
+        "id": "PRD-QMA",
+        "code": "QMA-001",
+        "name": "قماش سادة",
+        "category": "أقمشة",
+        "purchasePrice": 100,
+        "sellingPrice": 250,
+        "stock": 20,
+        "minStock": 10,
+        "supplierId": "SUP-TXT",
+        "supplierName": "مصنع النسيج الحديث"
+      },
+      {
+        "id": "PRD-SRM",
+        "code": "SRM-002",
+        "name": "سيراميك رمادي",
+        "category": "أرضيات",
+        "purchasePrice": 120,
+        "sellingPrice": 300,
+        "stock": 15,
+        "minStock": 8,
+        "supplierId": "SUP-SRM",
+        "supplierName": "شركة السيراميك الوطنية"
+      },
+      {
+        "id": "PRD-PNT",
+        "code": "PNT-003",
+        "name": "بويات",
+        "category": "دهانات",
+        "purchasePrice": 150,
+        "sellingPrice": 320,
+        "stock": 2,
+        "minStock": 5,
+        "supplierId": "SUP-DHN",
+        "supplierName": "دهانات النيل"
+      }
+    ],
+
+    "orders": [
+      {
+        "id": "ORD-1",
+        "customerId": "CUST-AHM",
+        "customerName": "أحمد محمد",
+        "customerPhone": "01012345678",
+        "customerSecondaryPhone": "",
+        "customerCategory": "عميل قطاعي / فردي",
+        "shippingAddress": "ش فيصل، الجيزة",
+        "shippingAddressId": "ADDR-AHM-1",
+        "shippingAddressLabel": "المنزل",
+        "items": [
+          {
+            "productId": "PRD-QMA",
+            "productName": "قماش سادة",
+            "quantity": 10,
+            "sellingPrice": 250,
+            "purchasePrice": 100,
+            "supplierId": "SUP-TXT",
+            "supplierName": "مصنع النسيج الحديث",
+            "consumed": 10
+          },
+          {
+            "productId": "PRD-SRM",
+            "productName": "سيراميك رمادي",
+            "quantity": 5,
+            "sellingPrice": 300,
+            "purchasePrice": 120,
+            "supplierId": "SUP-SRM",
+            "supplierName": "شركة السيراميك الوطنية",
+            "consumed": 5
+          }
+        ],
+        "itemsSubtotal": 4000,
+        "shippingCost": 100,
+        "shippingPayer": "customer",
+        "extraExpenses": 0,
+        "extraExpensesPayer": "merchant",
+        "totalAmount": 4100,
+        "downPayment": 2000,
+        "remainingBalance": 2100,
+        "paidInFull": false,
+        "status": "delivered",
+        "depositType": "custom",
+        "shippingRevenueDeposit": 0,
+        "directShipping": false,
+        "createdBy": "المدير العام",
+        "createdAt": "2026-08-01",
+        "updatedAt": "2026-08-01"
+      },
+      {
+        "id": "ORD-2",
+        "customerId": "CUST-SAR",
+        "customerName": "سارة علي",
+        "customerPhone": "01112345678",
+        "customerSecondaryPhone": "",
+        "customerCategory": "عميل قطاعي / فردي",
+        "shippingAddress": "مدينة نصر، القاهرة",
+        "shippingAddressId": "ADDR-SAR-1",
+        "shippingAddressLabel": "الشقة",
+        "items": [
+          {
+            "productId": "PRD-PNT",
+            "productName": "بويات",
+            "quantity": 4,
+            "sellingPrice": 320,
+            "purchasePrice": 150,
+            "supplierId": "SUP-DHN",
+            "supplierName": "دهانات النيل",
+            "consumed": 4
+          }
+        ],
+        "itemsSubtotal": 1280,
+        "shippingCost": 0,
+        "shippingPayer": "merchant",
+        "extraExpenses": 0,
+        "extraExpensesPayer": "merchant",
+        "totalAmount": 1280,
+        "downPayment": 1280,
+        "remainingBalance": 0,
+        "paidInFull": true,
+        "status": "delivered",
+        "depositType": "custom",
+        "shippingRevenueDeposit": 0,
+        "directShipping": false,
+        "createdBy": "المدير العام",
+        "createdAt": "2026-08-02",
+        "updatedAt": "2026-08-02"
+      },
+      {
+        "id": "ORD-3",
+        "customerId": "CUST-MHA",
+        "customerName": "معرض الحاج حسن",
+        "customerPhone": "01212345678",
+        "customerSecondaryPhone": "",
+        "customerCategory": "عميل تجاري / جملة",
+        "shippingAddress": "المنصورة، الدقهلية",
+        "shippingAddressId": "ADDR-MHA-1",
+        "shippingAddressLabel": "المعرض",
+        "items": [
+          {
+            "productId": "PRD-QMA",
+            "productName": "قماش سادة",
+            "quantity": 20,
+            "sellingPrice": 250,
+            "purchasePrice": 100,
+            "supplierId": "SUP-TXT",
+            "supplierName": "مصنع النسيج الحديث",
+            "consumed": 20
+          },
+          {
+            "productId": "PRD-SRM",
+            "productName": "سيراميك رمادي",
+            "quantity": 10,
+            "sellingPrice": 300,
+            "purchasePrice": 120,
+            "supplierId": "SUP-SRM",
+            "supplierName": "شركة السيراميك الوطنية",
+            "consumed": 10
+          }
+        ],
+        "itemsSubtotal": 8000,
+        "shippingCost": 0,
+        "shippingPayer": "merchant",
+        "extraExpenses": 0,
+        "extraExpensesPayer": "merchant",
+        "totalAmount": 8000,
+        "downPayment": 5000,
+        "remainingBalance": 3000,
+        "paidInFull": false,
+        "status": "delivered",
+        "depositType": "custom",
+        "shippingRevenueDeposit": 0,
+        "directShipping": false,
+        "createdBy": "المدير العام",
+        "createdAt": "2026-08-01",
+        "updatedAt": "2026-08-05"
+      },
+      {
+        "id": "ORD-4",
+        "customerId": "CUST-SAR",
+        "customerName": "سارة علي",
+        "customerPhone": "01112345678",
+        "customerSecondaryPhone": "",
+        "customerCategory": "عميل قطاعي / فردي",
+        "shippingAddress": "مدينة نصر، القاهرة",
+        "shippingAddressId": "ADDR-SAR-1",
+        "shippingAddressLabel": "الشقة",
+        "items": [
+          {
+            "productId": "PRD-QMA",
+            "productName": "قماش سادة",
+            "quantity": 8,
+            "sellingPrice": 250,
+            "purchasePrice": 100,
+            "supplierId": "SUP-TXT",
+            "supplierName": "مصنع النسيج الحديث",
+            "consumed": 0,
+            "isDirectShip": true
+          }
+        ],
+        "itemsSubtotal": 2000,
+        "shippingCost": 0,
+        "shippingPayer": "merchant",
+        "extraExpenses": 0,
+        "extraExpensesPayer": "merchant",
+        "totalAmount": 2000,
+        "downPayment": 2000,
+        "remainingBalance": 0,
+        "paidInFull": true,
+        "status": "delivered",
+        "depositType": "custom",
+        "shippingRevenueDeposit": 0,
+        "directShipping": true,
+        "supplierShipments": [
+          {
+            "supplierId": "SUP-TXT",
+            "supplierName": "مصنع النسيج الحديث",
+            "productId": "PRD-QMA",
+            "productName": "قماش سادة",
+            "units": 8,
+            "amount": 800
+          }
+        ],
+        "createdBy": "المدير العام",
+        "createdAt": "2026-08-03",
+        "updatedAt": "2026-08-03"
+      }
+    ],
+
+    "payments": [
+      {
+        "id": "PAY-DEP-1",
+        "entityType": "customer",
+        "entityId": "CUST-AHM",
+        "entityName": "أحمد محمد",
+        "amount": 2000,
+        "date": "2026-08-01",
+        "paymentMethod": "cash",
+        "notes": "دفعة مقدمة (عربون) للطلب رقم ORD-1",
+        "isDownPayment": true,
+        "createdBy": "المدير العام",
+        "createdAt": "2026-08-01",
+        "type": "deposit",
+        "refOrderId": "ORD-1",
+        "cycleKey": "deposit"
+      },
+      {
+        "id": "PAY-DEP-2",
+        "entityType": "customer",
+        "entityId": "CUST-SAR",
+        "entityName": "سارة علي",
+        "amount": 1280,
+        "date": "2026-08-02",
+        "paymentMethod": "cash",
+        "notes": "تحصيل كامل قيمة الفاتورة رقم ORD-2",
+        "isDownPayment": true,
+        "createdBy": "المدير العام",
+        "createdAt": "2026-08-02",
+        "type": "deposit",
+        "refOrderId": "ORD-2",
+        "cycleKey": "deposit"
+      },
+      {
+        "id": "PAY-DEP-3",
+        "entityType": "customer",
+        "entityId": "CUST-MHA",
+        "entityName": "معرض الحاج حسن",
+        "amount": 3000,
+        "date": "2026-08-01",
+        "paymentMethod": "cash",
+        "notes": "دفعة مقدمة (عربون) للطلب رقم ORD-3",
+        "isDownPayment": true,
+        "createdBy": "المدير العام",
+        "createdAt": "2026-08-01",
+        "type": "deposit",
+        "refOrderId": "ORD-3",
+        "cycleKey": "deposit"
+      },
+      {
+        "id": "PAY-DEP-4",
+        "entityType": "customer",
+        "entityId": "CUST-SAR",
+        "entityName": "سارة علي",
+        "amount": 2000,
+        "date": "2026-08-03",
+        "paymentMethod": "cash",
+        "notes": "تحصيل كامل قيمة الفاتورة رقم ORD-4",
+        "isDownPayment": true,
+        "createdBy": "المدير العام",
+        "createdAt": "2026-08-03",
+        "type": "deposit",
+        "refOrderId": "ORD-4",
+        "cycleKey": "deposit"
+      },
+      {
+        "id": "PAY-DIR-1",
+        "entityType": "customer",
+        "entityId": "CUST-MHA",
+        "entityName": "معرض الحاج حسن",
+        "amount": 2000,
+        "date": "2026-08-05",
+        "paymentMethod": "cash",
+        "notes": "دفعة على فاتورة ORD-3",
+        "isDownPayment": false,
+        "createdBy": "المدير العام",
+        "createdAt": "2026-08-05",
+        "type": "payment",
+        "refOrderId": "ORD-3",
+        "cycleKey": "",
+        "allocatedToOrders": true
+      },
+      {
+        "id": "PAY-SUP-TXT",
+        "entityType": "supplier",
+        "entityId": "SUP-TXT",
+        "entityName": "مصنع النسيج الحديث",
+        "amount": 2000,
+        "date": "2026-08-04",
+        "paymentMethod": "bank",
+        "notes": "تسديد دفعة لمصنع النسيج الحديث",
+        "isDownPayment": false,
+        "createdBy": "المدير العام",
+        "createdAt": "2026-08-04",
+        "type": "payment"
+      },
+      {
+        "id": "PAY-SUP-SRM",
+        "entityType": "supplier",
+        "entityId": "SUP-SRM",
+        "entityName": "شركة السيراميك الوطنية",
+        "amount": 1000,
+        "date": "2026-08-04",
+        "paymentMethod": "bank",
+        "notes": "تسديد دفعة لشركة السيراميك الوطنية",
+        "isDownPayment": false,
+        "createdBy": "المدير العام",
+        "createdAt": "2026-08-04",
+        "type": "payment"
+      },
+      {
+        "id": "PAY-EXP-R",
+        "entityType": "treasury",
+        "entityId": "",
+        "entityName": "الخزينة",
+        "amount": -3500,
+        "date": "2026-08-05",
+        "paymentMethod": "cash",
+        "notes": "مصروف دوري (إيجار): إيجار المعرض",
+        "isDownPayment": false,
+        "createdBy": "المدير العام",
+        "createdAt": "2026-08-05",
+        "type": "expense",
+        "cycleKey": "expense-2026-08"
+      },
+      {
+        "id": "PAY-EXP-O",
+        "entityType": "treasury",
+        "entityId": "",
+        "entityName": "الخزينة",
+        "amount": -850,
+        "date": "2026-08-06",
+        "paymentMethod": "cash",
+        "notes": "مصروف لمرة واحدة: فاتورة كهرباء",
+        "isDownPayment": false,
+        "createdBy": "المدير العام",
+        "createdAt": "2026-08-06",
+        "type": "expense"
+      }
+    ],
+
+    "expenses": [
+      {
+        "id": "EXP-1",
+        "title": "إيجار المعرض",
+        "amount": 3500,
+        "category": "إيجار",
+        "date": "2026-08-01",
+        "notes": "إيجار شهري للمعرض",
+        "recurring": true,
+        "dueDay": 5,
+        "lastPostedPeriod": "2026-08",
+        "createdBy": "المدير العام",
+        "createdAt": "2026-08-01",
+        "updatedAt": "2026-08-05"
+      },
+      {
+        "id": "EXP-2",
+        "title": "فاتورة كهرباء",
+        "amount": 850,
+        "category": "مصروفات تشغيلية",
+        "date": "2026-08-06",
+        "notes": "",
+        "recurring": false,
+        "dueDay": null,
+        "createdBy": "المدير العام",
+        "createdAt": "2026-08-06",
+        "updatedAt": "2026-08-06"
+      },
+      {
+        "id": "EXP-3",
+        "title": "رواتب العاملين",
+        "amount": 12000,
+        "category": "رواتب",
+        "date": "2026-08-01",
+        "notes": "رواتب شهر أغسطس",
+        "recurring": true,
+        "dueDay": 1,
+        "lastPostedPeriod": "2026-08",
+        "createdBy": "المدير العام",
+        "createdAt": "2026-08-01",
+        "updatedAt": "2026-08-01"
+      }
+    ],
+
+    "supplierTransactions": [
+      {
+        "id": "SUPLOG-T1",
+        "supplierId": "SUP-TXT",
+        "supplierName": "مصنع النسيج الحديث",
+        "type": "توريد مشتريات أولي",
+        "refId": "STOCK-QMA",
+        "debit": 5000,
+        "credit": 0,
+        "note": "رصيد افتتاحي: قماش سادة 50 قطعة × 100",
+        "createdAt": "2026-07-28"
+      },
+      {
+        "id": "SUPLOG-T2",
+        "supplierId": "SUP-TXT",
+        "supplierName": "مصنع النسيج الحديث",
+        "type": "تسديد دفعة",
+        "refId": "PAY-SUP-TXT",
+        "debit": 0,
+        "credit": 2000,
+        "note": "تسديد دفعة / تحويل للمورد",
+        "createdAt": "2026-08-04"
+      },
+      {
+        "id": "SUPLOG-T3",
+        "supplierId": "SUP-TXT",
+        "supplierName": "مصنع النسيج الحديث",
+        "type": "شحنة توريد",
+        "refId": "ORD-4",
+        "debit": 800,
+        "credit": 0,
+        "note": "شحن مباشر من المورد للطلب ORD-4: \"قماش سادة\" (8 قطعة × 100) بدون مرور المخزن",
+        "createdAt": "2026-08-03"
+      },
+      {
+        "id": "SUPLOG-S1",
+        "supplierId": "SUP-SRM",
+        "supplierName": "شركة السيراميك الوطنية",
+        "type": "توريد مشتريات أولي",
+        "refId": "STOCK-SRM",
+        "debit": 3600,
+        "credit": 0,
+        "note": "رصيد افتتاحي: سيراميك رمادي 30 قطعة × 120",
+        "createdAt": "2026-07-28"
+      },
+      {
+        "id": "SUPLOG-S2",
+        "supplierId": "SUP-SRM",
+        "supplierName": "شركة السيراميك الوطنية",
+        "type": "تسديد دفعة",
+        "refId": "PAY-SUP-SRM",
+        "debit": 0,
+        "credit": 1000,
+        "note": "تسديد دفعة / تحويل للمورد",
+        "createdAt": "2026-08-04"
+      },
+      {
+        "id": "SUPLOG-D1",
+        "supplierId": "SUP-DHN",
+        "supplierName": "دهانات النيل",
+        "type": "توريد مشتريات أولي",
+        "refId": "STOCK-PNT",
+        "debit": 900,
+        "credit": 0,
+        "note": "رصيد افتتاحي: بويات 6 قطع × 150",
+        "createdAt": "2026-07-28"
+      }
+    ],
+
+    "supplierReturns": []
+  }
+}

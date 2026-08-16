@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>مصنع العملاء — Client Factory UI</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+    background: #0e0f14;
+    color: #e6e6f0;
+    min-height: 100vh;
+    padding: 24px;
+  }
+  header { text-align: center; margin-bottom: 20px; }
+  header h1 { font-size: 22px; color: #a89dff; }
+  header p { color: #8a8fa8; font-size: 13px; margin-top: 6px; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  .card {
+    background: #171a23;
+    border: 1px solid #2a2e3d;
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+  }
+  .card-title { font-weight: 700; color: #a89dff; margin-bottom: 12px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+  .span-2 { grid-column: span 2; }
+  .field label { display: block; font-size: 12px; color: #b8bcd4; margin-bottom: 4px; }
+  .field .hint { font-size: 11px; color: #6f7690; margin-top: 3px; }
+  input, select, textarea {
+    width: 100%;
+    padding: 8px 10px;
+    background: #0e1017;
+    border: 1px solid #2e3347;
+    border-radius: 8px;
+    color: #e6e6f0;
+    font-size: 13px;
+    direction: ltr;
+    text-align: left;
+  }
+  .color-row { display: flex; gap: 8px; align-items: center; }
+  .color-row input[type=color] { width: 52px; height: 38px; padding: 2px; cursor: pointer; flex: 0 0 52px; }
+  .logo-upload { display: flex; gap: 10px; align-items: center; }
+  .logo-upload input[type=file] { flex: 1; }
+  .logo-upload img { width: 44px; height: 44px; object-fit: contain; border-radius: 8px; background: #0e1017; border: 1px solid #2e3347; display: none; }
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 13px;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    background: linear-gradient(135deg, #7c3aed, #a89dff);
+    color: #fff;
+    margin-top: 4px;
+  }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .btn.small { padding: 8px; font-size: 12px; width: auto; display: inline-block; background: #23273a; color: #b8bcd4; }
+  .btn.ghost { background: #23273a; color: #b8bcd4; }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #b8bcd4; margin-top: 10px; }
+  .check input { width: auto; }
+  textarea { direction: rtl; text-align: right; font-family: Consolas, monospace; font-size: 12px; min-height: 120px; }
+  #log {
+    background: #0a0b10;
+    border: 1px solid #262b3d;
+    border-radius: 10px;
+    padding: 12px;
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 12px;
+    color: #9ce6a1;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 420px;
+    overflow-y: auto;
+    min-height: 120px;
+    direction: ltr;
+    text-align: left;
+    display: none;
+  }
+  #status { font-size: 13px; margin-top: 8px; color: #8a8fa8; text-align: center; }
+  #error {
+    background: #3b1414;
+    border: 1px solid #7a2a2a;
+    color: #ffb3b3;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 13px;
+    margin-top: 10px;
+    white-space: pre-wrap;
+    display: none;
+  }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; background: #232a4a; color: #a89dff; margin-inline-start: 6px; }
+  .fb-extract { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .fb-extract .btn { width: auto; display: inline-block; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; min-height: 28px; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #23273a;
+    border: 1px solid #2e3347;
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: #e6e6f0;
+  }
+  .chip button {
+    background: none;
+    border: none;
+    color: #ff8a8a;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0 2px;
+  }
+  .chip-add { display: flex; gap: 8px; }
+  .chip-add input { flex: 1; }
+  .chip-empty { font-size: 12px; color: #6f7690; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>مصنع العملاء <span class="badge">Client Factory</span></h1>
+    <p>املأ بيانات العميل واضغط «بناء» — ينسخ السيستم الحالي، يولّد التكوين، ينشئ الريبو ويرفع على GitHub ويعيد لك الرابط.</p>
+  </header>
+
+  <div class="card">
+    <div class="card-title">🔑 GITHUB_TOKEN</div>
+    <div class="grid">
+      <div class="field span-2">
+        <label>توكن GitHub (صلاحيات repo + workflow) — يُستخدم لمرة واحدة ولا يُحفظ</label>
+        <input id="token" type="password" placeholder="ghp_..." autocomplete="off" />
+        <div class="hint">صاحب التوكن هو من سيُسجَّل كمشرف على الريبوهات المنشأة.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🏷️ هوية العميل</div>
+    <div class="grid">
+      <div class="field">
+        <label>معرّف العميل (clientId) — إنجليزي صغير بلا مسافات *</label>
+        <input id="clientId" placeholder="myclient" />
+      </div>
+      <div class="field">
+        <label>اسم المتجر/العميل (appName)</label>
+        <input id="appName" oninput="autoDerive()" />
+      </div>
+      <div class="field">
+        <label>الشعار النصي (tagline)</label>
+        <input id="tagline" />
+      </div>
+      <div class="field">
+        <label>ملف الشعار (logo) — ارفع صورة لتظهر كأيقونة الموقع</label>
+        <div class="logo-upload">
+          <input id="logoFile" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon,.png,.jpg,.jpeg,.webp,.svg,.ico" onchange="onLogoPick(this)" />
+          <img id="logoPreview" alt="" />
+        </div>
+        <div class="hint" id="logoNameText">لم يتم اختيار صورة — سيُستخدم لوجو القالب الافتراضي (2.png)</div>
+      </div>
+      <div class="field">
+        <label>اللون الرئيسي (primaryColor)</label>
+        <div class="color-row">
+          <input id="primaryColor" type="color" value="#8B7CFF" oninput="syncColorToText()" />
+          <input id="primaryColorHex" type="text" value="#8B7CFF" placeholder="#8B7CFF" oninput="syncTextToColor()" />
+        </div>
+      </div>
+      <div class="field">
+        <label>الثيم</label>
+        <select id="theme"></select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">👥 تصنيفات العملاء <span class="badge">customerCategories</span></div>
+    <div class="chips" id="custCats"></div>
+    <div class="chip-add">
+      <input id="custCatInput" placeholder="أدخل تصنيف عميل جديد..." onkeydown="if(event.key==='Enter'){event.preventDefault();addCustCat()}" />
+      <button class="btn small" onclick="addCustCat()">➕ إضافة</button>
+    </div>
+    <div class="field" style="margin-top:12px">
+      <label>التصنيف الافتراضي (defaultCustomerCategory)</label>
+      <select id="defaultCustomerCategory"></select>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">💸 أصناف المصروفات <span class="badge">expenseCategories</span></div>
+    <div class="chips" id="expCats"></div>
+    <div class="chip-add">
+      <input id="expCatInput" placeholder="أدخل صنف مصروفات جديد..." onkeydown="if(event.key==='Enter'){event.preventDefault();addExpCat()}" />
+      <button class="btn small" onclick="addExpCat()">➕ إضافة</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🌐 العملة والمنطقة الزمنية</div>
+    <div class="grid">
+      <div class="field">
+        <label>العملة (currency) — يضبط الرمز ومنطقة الأرقام معاً</label>
+        <select id="currencySymbol"></select>
+        <input id="currencyManual" type="text" placeholder="اكتب رمز عملة جديد... (مثال: د.ل)" style="display:none" />
+        <div class="hint">«لا عملة» = النظام يعمل بدون رمز عملة في أي مكان.</div>
+      </div>
+      <div class="field">
+        <label>منطقة تنسيق الأرقام (locale)</label>
+        <select id="currencyLocale"></select>
+        <input id="localeManual" type="text" placeholder="اكتب locale جديد... (مثال: ar-LY)" style="display:none" />
+      </div>
+      <div class="field">
+        <label>المنطقة الزمنية (timeZone)</label>
+        <select id="timeZone"></select>
+        <input id="tzManual" type="text" placeholder="اكتب منطقة زمنية جديدة... (مثال: Asia/Kuwait)" style="display:none" />
+      </div>
+      <div class="field">
+        <label>المحافظة / المنطقة الافتراضية</label>
+        <select id="governorate"></select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔥 مشروع Firebase <span class="badge">لصق تلقائي</span></div>
+    <div class="grid">
+      <div class="field span-2">
+        <label>الصق هنا كود الإعدادات كاملاً من لوحة Firebase (firebaseConfig) ثم اضغط «استخراج»</label>
+        <textarea id="fbPaste" placeholder='مثال:
+  apiKey: "AIzaSy...",
+  authDomain: "proj.firebaseapp.com",
+  projectId: "proj",
+  storageBucket: "proj.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef",
+  measurementId: "G-XXXXXXX"'></textarea>
+        <div class="fb-extract">
+          <button class="btn small" onclick="extractFirebase()">🧩 استخراج تلقائي</button>
+          <span class="hint">يتعرّف على: apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId, measurementId</span>
+        </div>
+      </div>
+      <div class="field"><label>API Key</label><input id="fbApiKey" placeholder="AIzaSy..." /></div>
+      <div class="field"><label>Auth Domain</label><input id="fbAuthDomain" placeholder="proj.firebaseapp.com" /></div>
+      <div class="field"><label>Project ID</label><input id="fbProjectId" placeholder="project-id" /></div>
+      <div class="field"><label>Storage Bucket</label><input id="fbBucket" placeholder="proj.appspot.com" /></div>
+      <div class="field"><label>Messaging Sender ID</label><input id="fbSenderId" /></div>
+      <div class="field"><label>App ID</label><input id="fbAppId" /></div>
+      <div class="field span-2"><label>Measurement ID</label><input id="fbMeasurementId" /></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📊 المزامنة مع Google Sheets (Webhook — V3.59)</div>
+    <div class="grid">
+      <div class="field span-2">
+        <label>رابط Web App Script (exec) — اختياري، يمكن إدخاله لاحقاً من الإعدادات</label>
+        <input id="webhookUrl" placeholder="https://script.google.com/macros/s/.../exec" />
+      </div>
+      <div class="field">
+        <label>اتجاه المزامنة</label>
+        <select id="syncDirection">
+          <option value="export">تصدير فقط (export)</option>
+          <option value="import">استيراد فقط (import)</option>
+          <option value="both">اتجاهان (both)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>التكرار</label>
+        <select id="syncFrequency">
+          <option value="manual">يدوي (manual)</option>
+          <option value="every-op">بعد كل عملية (every-op)</option>
+          <option value="15m">كل 15 دقيقة</option>
+          <option value="1h">كل ساعة</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🤖 الذكاء الاصطناعي (أمان: يُحقن وقت البناء من Actions Secrets)</div>
+    <div class="grid">
+      <div class="field">
+        <label>مفتاح Gemini API</label>
+        <input id="geminiKey" type="password" placeholder="AIzaSy..." autocomplete="off" />
+      </div>
+      <div class="field">
+        <label>نموذج AI</label>
+        <input id="aiModel" placeholder="gemini-3.1-flash-lite" />
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">💾 النسخ الاحتياطي اليومي إلى Google Drive <span class="badge">يولّد backup/BMS-Daily-Backup.gs</span></div>
+    <div class="grid">
+      <div class="field span-2">
+        <label>ملف مفتاح الخدمة (service account JSON) — من Google Cloud ← Service Accounts ← Keys</label>
+        <input id="backupSaFile" type="file" accept=".json,application/json" onchange="onSaPick(this)" />
+        <div class="hint" id="saNameText">لم يتم اختيار ملف — سيُتخطى توليد ملف النسخ الجاهز (يُضاف لاحقاً يدوياً).</div>
+      </div>
+      <div class="field span-2">
+        <label>إيميل العميل — تظهر له النسخ اليومية في مجلد Drive مشارَك (بريده الحالي يكفي)</label>
+        <input id="backupOwnerEmail" type="email" placeholder="client@example.com" dir="ltr" />
+        <div class="hint">المفتاح محلي فقط — لا يُرفع إلى المستودع العام. الملف الجاهز: backup/BMS-Daily-Backup.gs</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🚀 النشر على GitHub</div>
+    <div class="grid">
+      <div class="field">
+        <label>اسم المستودع على GitHub (يتعبأ تلقائياً من اسم المتجر)</label>
+        <input id="repoName" placeholder="يُشتق تلقائياً من اسم المتجر" />
+      </div>
+      <div class="field">
+        <label>مجلد المشروع المحلي</label>
+        <input id="outDir" placeholder="E:\...\Projects\اسم المتجر" />
+        <div class="hint">افتراضياً: E:\محمد\سييتم علاء\Projects\اسم المتجر</div>
+      </div>
+    </div>
+    <div class="check">
+      <input id="dryRun" type="checkbox" />
+      <label for="dryRun">وضع تجريبي (تجربة بدون إنشاء أو رفع — يعرض التكوين فقط)</label>
+    </div>
+    <button class="btn" id="buildBtn" onclick="startBuild()">⚙️ بناء النظام ورفعه إلى GitHub</button>
+    <button class="btn ghost" id="fillBtn" onclick="fillDemo()">✍️ تعبئة بيانات تجريبية</button>
+  </div>
+
+  <div id="error"></div>
+  <div id="status"></div>
+  <div id="log"></div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id)
+  const THEME_LIST = ['dark','light','ocean','emerald','royal','coffee','luxury-gold','graphite','mint','midnight','deep-purple','light-professional']
+
+  const CURRENCIES = [
+    { label: 'جنيه مصري', symbol: 'ج.م', locale: 'ar-EG' },
+    { label: 'ريال سعودي', symbol: 'ر.س', locale: 'ar-SA' },
+    { label: 'درهم إماراتي', symbol: 'د.إ', locale: 'ar-AE' },
+    { label: 'ريال قطري', symbol: 'ر.ق', locale: 'ar-QA' },
+    { label: 'دينار بحريني', symbol: 'د.ب', locale: 'ar-BH' },
+    { label: 'ريال عماني', symbol: 'ر.ع', locale: 'ar-OM' },
+    { label: 'دينار كويتي', symbol: 'د.ك', locale: 'ar-KW' },
+    { label: 'دينار أردني', symbol: 'د.أ', locale: 'ar-JO' },
+    { label: 'ليرة سورية', symbol: 'ل.س', locale: 'ar-SY' },
+    { label: 'دينار ليبي', symbol: 'د.ل', locale: 'ar-LY' },
+    { label: 'دينار جزائري', symbol: 'د.ج', locale: 'ar-DZ' },
+    { label: 'درهم مغربي', symbol: 'د.م', locale: 'ar-MA' },
+    { label: 'دينار تونسي', symbol: 'د.ت', locale: 'ar-TN' },
+    { label: 'جنيه سوداني', symbol: 'ج.س', locale: 'ar-SD' },
+    { label: 'دولار أمريكي', symbol: '$', locale: 'en-US' },
+    { label: 'يورو', symbol: '€', locale: 'de-DE' },
+    { label: 'جنيه إسترليني', symbol: '£', locale: 'en-GB' },
+    { label: 'لا عملة (بدون رمز)', symbol: '', locale: 'ar-EG' },
+  ]
+  const LOCALES = [
+    'ar-EG','ar-SA','ar-AE','ar-KW','ar-QA','ar-BH','ar-OM','ar-JO','ar-SY','ar-LB','ar-LY','ar-DZ','ar-MA','ar-TN','ar-SD','ar-IQ','ar-YE',
+    'en-US','en-GB','en-AU','de-DE','fr-FR','tr-TR','es-ES','it-IT','ru-RU','pt-BR','hi-IN','ur-PK','bn-BD','zh-CN','ja-JP','id-ID',
+  ]
+  const TIMEZONES = [
+    'Africa/Cairo','Africa/Casablanca','Africa/Algiers','Africa/Tunis','Africa/Tripoli','Africa/Lagos','Africa/Johannesburg',
+    'Asia/Riyadh','Asia/Dubai','Asia/Kuwait','Asia/Qatar','Asia/Bahrain','Asia/Muscat','Asia/Amman','Asia/Beirut','Asia/Damascus','Asia/Baghdad','Asia/Jerusalem',
+    'Europe/Istanbul','Europe/Athens','Europe/Bucharest','Europe/Berlin','Europe/Paris','Europe/Madrid','Europe/London','Europe/Moscow',
+    'America/New_York','America/Chicago','America/Los_Angeles','America/Sao_Paulo',
+    'Asia/Kolkata','Asia/Karachi','Asia/Dhaka','Asia/Shanghai','Asia/Tokyo','Asia/Singapore','Australia/Sydney','UTC',
+  ]
+  const SELECT_OTHER = '__other__'
+
+  // يبني قائمة منسدلة من قيم معروفة + خيار «أخرى (إدخال يدوي)...» يظهر معه حقل نصي.
+  function initSelect(sel, manualInput, values, current) {
+    const normalized = current != null ? String(current) : ''
+    const known = values.indexOf(normalized) !== -1
+    sel.innerHTML = values.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('')
+      + `<option value="${SELECT_OTHER}">أخرى (إدخال يدوي)...</option>`
+    sel.value = known ? normalized : SELECT_OTHER
+    if (manualInput) {
+      manualInput.style.display = known ? 'none' : 'block'
+      manualInput.value = known ? '' : normalized
+    }
+  }
+
+  function bindSelectManual(sel, manualInput) {
+    if (!sel || !manualInput) return
+    sel.onchange = () => {
+      const isOther = sel.value === SELECT_OTHER
+      manualInput.style.display = isOther ? 'block' : 'none'
+      if (!isOther) manualInput.value = ''
+      if (isOther) manualInput.focus()
+    }
+  }
+
+  function getSelectValue(sel, manualInput) {
+    if (!sel) return ''
+    if (sel.value === SELECT_OTHER) return manualInput ? manualInput.value.trim() : ''
+    return sel.value
+  }
+
+  // قائمة العملات: الخيارات مرتبطة بالرمز + ضبط locale تلقائياً عند الاختيار.
+  function initCurrencySelect(currentSymbol) {
+    const sel = $('currencySymbol')
+    const manual = $('currencyManual')
+    const localeSel = $('currencyLocale')
+    if (!sel) return
+    const normalized = currentSymbol != null ? String(currentSymbol) : ''
+    const match = CURRENCIES.find(c => c.symbol === normalized)
+    const selIdx = match ? CURRENCIES.indexOf(match) : (normalized === '' ? CURRENCIES.length - 1 : -1)
+    sel.innerHTML = CURRENCIES.map((c, i) => `<option value="${i}"${i === selIdx ? ' selected' : ''}>${c.label}${c.symbol ? ' (' + c.symbol + ')' : ''}</option>`).join('')
+      + `<option value="${SELECT_OTHER}"${selIdx === -1 && normalized ? ' selected' : ''}>أخرى (إدخال يدوي)...</option>`
+    if (selIdx !== -1) {
+      manual.style.display = 'none'
+      manual.value = ''
+      if (match && localeSel) localeSel.value = match.locale
+    } else {
+      manual.style.display = 'block'
+      manual.value = normalized
+    }
+    sel.onchange = () => {
+      const idx = Number(sel.value)
+      if (sel.value !== SELECT_OTHER && CURRENCIES[idx]) {
+        manual.style.display = 'none'
+        manual.value = ''
+        if (localeSel) {
+          localeSel.value = CURRENCIES[idx].locale
+          const lm = $('localeManual')
+          if (lm) { lm.style.display = 'none'; lm.value = '' }
+        }
+      } else {
+        manual.style.display = 'block'
+        manual.value = ''
+        manual.focus()
+      }
+    }
+  }
+
+  function getCurrencySymbol() {
+    const sel = $('currencySymbol')
+    const manual = $('currencyManual')
+    if (!sel) return ''
+    if (sel.value === SELECT_OTHER) return manual ? manual.value.trim() : ''
+    const idx = Number(sel.value)
+    if (!isNaN(idx) && CURRENCIES[idx]) return CURRENCIES[idx].symbol
+    return ''
+  }
+
+  let DEFAULTS = { outDirBase: 'E:\\محمد\\سييتم علاء\\Projects', governorates: ['القاهرة'], aiModel: 'gemini-3.1-flash-lite' }
+  let uploadedLogo = null
+
+  const sanitizeFolder = (s) => String(s || '').replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/[. ]+$/g, '').trim()
+  const slugify = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]))
+
+  let custCats = ['تاجر جملة','تاجر تجزئة','عميل قطاعي / فردي','جمعية خيرية / مؤسسة','معرض / وكيل','عميل محتمل']
+  let expCats = ['عمومية','إيجارات','كهرباء ومرافق','أجور ومرتبات','تغليف ومطبوعات','شحن ونقل']
+
+  function renderCustCats() {
+    const el = $('custCats')
+    el.innerHTML = custCats.length
+      ? custCats.map((c, i) => `<span class="chip">${escapeHtml(c)} <button type="button" onclick="removeCustCat(${i})">×</button></span>`).join('')
+      : '<span class="chip-empty">لا توجد تصنيفات — يُستخدم الافتراضي من القالب.</span>'
+    renderDefaultCat()
+  }
+  function addCustCat() {
+    const input = $('custCatInput')
+    const v = input.value.trim()
+    if (v && !custCats.includes(v)) { custCats.push(v); renderCustCats() }
+    input.value = ''
+    input.focus()
+  }
+  function removeCustCat(i) { custCats.splice(i, 1); renderCustCats() }
+  function renderDefaultCat() {
+    const sel = $('defaultCustomerCategory')
+    const prev = sel.value
+    sel.innerHTML = custCats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')
+    if (custCats.includes(prev)) sel.value = prev
+  }
+  function renderExpCats() {
+    const el = $('expCats')
+    el.innerHTML = expCats.length
+      ? expCats.map((c, i) => `<span class="chip">${escapeHtml(c)} <button type="button" onclick="removeExpCat(${i})">×</button></span>`).join('')
+      : '<span class="chip-empty">لا توجد أصناف — يُستخدم الافتراضي من القالب.</span>'
+  }
+  function addExpCat() {
+    const input = $('expCatInput')
+    const v = input.value.trim()
+    if (v && !expCats.includes(v)) { expCats.push(v); renderExpCats() }
+    input.value = ''
+    input.focus()
+  }
+  function removeExpCat(i) { expCats.splice(i, 1); renderExpCats() }
+
+  function autoDerive() {
+    const appName = $('appName').value.trim()
+    $('outDir').value = appName ? DEFAULTS.outDirBase + '\\' + sanitizeFolder(appName) : ''
+    const slug = slugify(appName)
+    $('repoName').value = slug
+    $('repoName').placeholder = slug ? '' : 'أدخل اسماً بنفسك (غالباً: el-ragabi مثلاً)'
+  }
+
+  async function init() {
+    $('theme').innerHTML = THEME_LIST.map(t => `<option value="${t}">${t}</option>`).join('')
+    let d = DEFAULTS
+    try {
+      const r = await fetch('/defaults')
+      if (!r.ok) throw new Error('no defaults')
+      d = await r.json()
+      Object.assign(DEFAULTS, d)
+      if (d.appName) $('appName').value = d.appName
+      if (d.tagline) $('tagline').value = d.tagline
+      if (d.primaryColor) { $('primaryColor').value = d.primaryColor; $('primaryColorHex').value = d.primaryColor.toUpperCase() }
+      if (d.theme && THEME_LIST.includes(d.theme)) $('theme').value = d.theme
+      if (d.governorates && d.governorates.length) {
+        $('governorate').innerHTML = d.governorates.map(g => `<option value="${g}">${g}</option>`).join('')
+        if (d.governorate && d.governorates.includes(d.governorate)) $('governorate').value = d.governorate
+      }
+      if (d.direction) $('syncDirection').value = d.direction
+      if (d.frequency) $('syncFrequency').value = d.frequency
+      if (d.aiModel) $('aiModel').value = d.aiModel
+      renderCustCats()
+      renderExpCats()
+      autoDerive()
+    } catch (e) {}
+    initCurrencySelect(d.currencySymbol !== undefined ? d.currencySymbol : '')
+    initSelect($('currencyLocale'), $('localeManual'), LOCALES, d.currencyLocale || '')
+    initSelect($('timeZone'), $('tzManual'), TIMEZONES, d.timeZone || '')
+    bindSelectManual($('currencyLocale'), $('localeManual'))
+    bindSelectManual($('timeZone'), $('tzManual'))
+  }
+
+  function fillDemo() {
+    $('clientId').value = 'demo-client'
+    $('appName').value = 'متجر تجريبي'
+    $('tagline').value = 'نظام إدارة المبيعات والمخزون'
+    $('primaryColor').value = '#0284c7'; $('primaryColorHex').value = '#0284C7'
+    $('theme').value = 'dark'
+    $('fbApiKey').value = 'AIzaSy-EXAMPLE'
+    $('fbProjectId').value = 'demo-project'
+    $('backupOwnerEmail').value = 'client@example.com'
+    initCurrencySelect('ج.م')
+    initSelect($('currencyLocale'), $('localeManual'), LOCALES, 'ar-EG')
+    initSelect($('timeZone'), $('tzManual'), TIMEZONES, 'Africa/Cairo')
+    autoDerive()
+  }
+
+  function syncTextToColor() {
+    const v = $('primaryColorHex').value.trim()
+    if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) $('primaryColor').value = v
+  }
+  function syncColorToText() { $('primaryColorHex').value = $('primaryColor').value.toUpperCase() }
+
+  function onLogoPick(input) {
+    const f = input.files && input.files[0]
+    if (!f) return
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      uploadedLogo = { name: f.name, dataUrl: e.target.result }
+      const preview = $('logoPreview')
+      preview.src = uploadedLogo.dataUrl
+      preview.style.display = 'block'
+      $('logoNameText').textContent = 'تم اختيار: ' + f.name
+    }
+    reader.readAsDataURL(f)
+  }
+
+  let uploadedSa = null
+  function onSaPick(input) {
+    const f = input.files && input.files[0]
+    if (!f) return
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const content = String(e.target.result || '')
+      try { JSON.parse(content) } catch (err) {
+        $('saNameText').textContent = '❌ الملف ليس JSON صالحاً: ' + err.message
+        uploadedSa = null
+        return
+      }
+      uploadedSa = { name: f.name, content }
+      $('saNameText').textContent = '✅ تم تحميل مفتاح الخدمة: ' + f.name + ' — سيُولَّد ملف النسخ الجاهز'
+    }
+    reader.readAsText(f, 'utf8')
+  }
+
+  const FB_FIELDS = {
+    apiKey: 'fbApiKey',
+    authDomain: 'fbAuthDomain',
+    projectId: 'fbProjectId',
+    storageBucket: 'fbBucket',
+    messagingSenderId: 'fbSenderId',
+    appId: 'fbAppId',
+    measurementId: 'fbMeasurementId',
+  }
+  function extractFirebase() {
+    const code = $('fbPaste').value
+    let filled = 0
+    Object.entries(FB_FIELDS).forEach(([key, elId]) => {
+      const m = new RegExp(key + '\\s*:\\s*["\']?([^"\',}\\s]+)').exec(code)
+      const el = $((elId || ''))
+      if (m && m[1] && el) {
+        el.value = m[1].replace(/["']/g, '')
+        filled++
+      }
+    })
+    const status = $('status')
+    status.textContent = filled ? '✅ تم استخراج ' + filled + ' حقلاً من كود Firebase' : 'لم أتعرف على أي حقول — تأكد من لصق كود firebaseConfig'
+  }
+
+  function readFields() {
+    return {
+      clientId: $('clientId').value,
+      appName: $('appName').value,
+      tagline: $('tagline').value,
+      primaryColor: $('primaryColorHex').value,
+      theme: $('theme').value,
+      governorate: $('governorate').value,
+      customerCategories: custCats,
+      defaultCategory: $('defaultCustomerCategory').value,
+      expenseCategories: expCats,
+      currencySymbol: getCurrencySymbol(),
+      currencyLocale: getSelectValue($('currencyLocale'), $('localeManual')),
+      timeZone: getSelectValue($('timeZone'), $('tzManual')),
+      fbApiKey: $('fbApiKey').value,
+      fbAuthDomain: $('fbAuthDomain').value,
+      fbProjectId: $('fbProjectId').value,
+      fbBucket: $('fbBucket').value,
+      fbSenderId: $('fbSenderId').value,
+      fbAppId: $('fbAppId').value,
+      fbMeasurementId: $('fbMeasurementId').value,
+      webhookUrl: $('webhookUrl').value,
+      syncDirection: $('syncDirection').value,
+      syncFrequency: $('syncFrequency').value,
+      geminiKey: $('geminiKey').value,
+      aiModel: $('aiModel').value,
+      backupOwnerEmail: $('backupOwnerEmail').value,
+      repoName: $('repoName').value,
+      outDir: $('outDir').value,
+    }
+  }
+
+  async function startBuild() {
+    const err = $('error')
+    err.style.display = 'none'
+    const log = $('log')
+    log.style.display = 'block'
+    log.textContent = ''
+    const status = $('status')
+    const btn = $('buildBtn')
+    btn.disabled = true
+    status.textContent = 'جاري التنفيذ...'
+
+    const payload = {
+      token: $('token').value.trim(),
+      dryRun: $('dryRun').checked,
+      fields: readFields(),
+      logo: uploadedLogo,
+      backupSa: uploadedSa,
+    }
+
+    try {
+      const res = await fetch('/build', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        let msg = text
+        try { msg = JSON.parse(text).error } catch {}
+        err.textContent = msg
+        err.style.display = 'block'
+        status.textContent = 'فشل البداية — تحقق من السجل'
+        btn.disabled = false
+        return
+      }
+      const reader = res.body.getReader()
+      const dec = new TextDecoder()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        log.textContent += dec.decode(value, { stream: true })
+        log.scrollTop = log.scrollHeight
+      }
+      const ok = /انتهى التنفيذ \(رمز 0\)/.test(log.textContent)
+      status.textContent = ok ? '✅ تم بنجاح — انسخ الرابط أعلاه' : '❌ فشل — راجع السجل أعلاه'
+    } catch (e) {
+      err.textContent = 'تعذر الاتصال بالسيرفر — تأكد أنه يعمل: node tools\\factory-server.mjs'
+      err.style.display = 'block'
+    } finally {
+      btn.disabled = false
+    }
+  }
+
+  init()
+</script>
+</body>
+</html>

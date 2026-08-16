@@ -1,0 +1,268 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =====================================================================
+    // V3.46 — حوكمة أمنية صارمة + RBAC كامل على مستوى القواعد
+    // ---------------------------------------------------------------------
+    // V3.45 أغلقت الوصول عن الحسابات الوهمية (isStaff) لكنها تركت أي عضو
+    // فريق (حتى الأدوار الدنيا) بصلاحية كاملة على كل مجموعات بيانات العمل.
+    // V3.46 تطابق القواعد هنا مع نفس مصفوفة الأدوار الموجودة في
+    // src/services/permissions.js حرفياً، حتى لا يستطيع أي حساب تجاوز
+    // الواجهة عبر استدعاء window.db مباشرة والوصول لصلاحية أعلى مما يراها.
+    //
+    // ⚠️ يجب اختبار هذا الملف عبر Firebase Emulator (firebase emulators:start
+    // --only firestore) قبل النشر — لم يُختبر هنا مقابل مشروع حي.
+    // =====================================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function staffDoc(uid) {
+      return get(/databases/$(database)/documents/staff/$(uid));
+    }
+
+    function staffRole(uid) {
+      return staffDoc(uid).data.role;
+    }
+
+    function isStaff(uid) {
+      return isSignedIn()
+        && staffDoc(uid).data != null
+        && staffRole(uid) in ['admin', 'employee', 'storekeeper', 'accountant'];
+    }
+
+    function isAdmin(uid) {
+      return isSignedIn()
+        && staffDoc(uid).data != null
+        && staffRole(uid) == 'admin';
+    }
+
+    // ————— دوال دور مفردة (تطابق permissions.js) —————
+    function isRole(uid, role) {
+      return isSignedIn() && staffDoc(uid).data != null && staffRole(uid) == role;
+    }
+
+    // ————— البوتستراف الأول (مرة واحدة فقط، ومربوط بسجل المستخدم الفعلي) —————
+    // V3.57 — أُغلق البوتستراف بالبريد فقط. كان أي حساب Firebase Auth حاصل على
+    // admin@store.com (مفتاح API عام + كلمة سر) قادراً على كتابة نفسه admin على
+    // قاعدة فارغة. الآن:
+    //   1) isSeedUserBootstrap — إنشاء users/USR-1001 ذاته (بالـ uid) مسموح فقط
+    //      عندما لا يوجد بعد أي users/USR-1001 ولا أي سجل staff، وفقط للبريد
+    //      الموثّق admin@store.com (uid مطابق).
+    //   2) isFirstBootstrap — كتابة staff/{uid} تتطلب أن يكون users/USR-1001
+    //      موجوداً فعلاً وأن يحمل uid هذا الحساب. فلا يكفي البريد.
+    function isSeedUserBootstrap(uid, docId) {
+      return isSignedIn()
+        && docId == 'USR-1001'
+        && request.auth.uid == request.resource.data.uid
+        && request.auth.token.email == 'admin@store.com'
+        && request.resource.data.email == 'admin@store.com'
+        && request.resource.data.role == 'admin'
+        && !exists(/databases/$(database)/documents/users/USR-1001)
+        && !exists(/databases/$(database)/documents/staff);
+    }
+
+    function isFirstBootstrap(uid, docId) {
+      let seedUser = get(/databases/$(database)/documents/users/USR-1001);
+      return isSignedIn()
+        && request.auth.uid == docId
+        && request.auth.token.email == 'admin@store.com'
+        && seedUser.exists
+        && seedUser.data.uid == request.auth.uid
+        && !exists(/databases/$(database)/documents/staff)
+        // V3.58 — إغلاق البوتستراف الدائم: يشترط ألا يكون مفتاح
+        // settings/staffBootstrapDone قد أُنشئ بعد (يُنشأ مرة واحدة ضمن أول
+        // staff/{uid} في دفعة ذرية). فحتى لو أُفرغت مجموعة staff يدوياً من
+        // الكونسول، تبقى البوابة مغلقة للأبد ولا يعود الادعاء الأول.
+        && !exists(/databases/$(database)/documents/settings/staffBootstrapDone)
+        && request.resource.data.role == 'admin';
+    }
+
+    // V3.58 — مفتاح الإغلاق الدائم: يسمح بإنشاء settings/staffBootstrapDone
+    // مرة واحدة فقط، بنفس شروط isFirstBootstrap (بوتستراف أول مدير مربوط
+    // بسجل users/USR-1001 الحامل للـ uid). التعديل والحذف ممنوعان حتى للمدير.
+    function isBootstrapMarkerWrite(uid) {
+      let seedUser = get(/databases/$(database)/documents/users/USR-1001);
+      return isSignedIn()
+        && request.auth.uid == request.resource.data.uid
+        && request.auth.token.email == 'admin@store.com'
+        && seedUser.exists
+        && seedUser.data.uid == request.auth.uid
+        && !exists(/databases/$(database)/documents/settings/staffBootstrapDone)
+        && request.resource.data.done == true;
+    }
+
+    // ————— حارس افتراضي: كل شيء مغلق ما لم يُصرَّح بمسار أدناه —————
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ————— سجل الأدوار staff/{uid} —————
+    // الإنشاء/التعديل للمدير فقط (بعد bootstrap اليدوي للمدير الأساسي).
+    // الحذف للمدير فقط، مع منع المدير من حذف سجلّه (حماية من الإغلاق الذاتي).
+    match /staff/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow create: if (isAdmin(request.auth.uid) || isFirstBootstrap(request.auth.uid, uid))
+        && request.resource.data.role in ['admin', 'employee', 'storekeeper', 'accountant'];
+      allow update: if (isAdmin(request.auth.uid) || isFirstBootstrap(request.auth.uid, uid))
+        && request.resource.data.role in ['admin', 'employee', 'storekeeper', 'accountant'];
+      allow delete: if isAdmin(request.auth.uid) && request.auth.uid != uid;
+    }
+
+    // ————— بيانات العمل: RBAC مطابق لـ permissions.js —————
+
+    // products — canManageProducts: admin/storekeeper. canDeleteProduct: admin.
+    // الكاشير (employee) يحتاج تحديث الكمية فقط (stock) كأثر تلقائي لإتمام
+    // البيع (posService/applyOrderFulfillment) — سُمح له بتحديث حقلي
+    // stock/updatedAt فقط، وليس بقية بيانات المنتج (سعر/اسم/كود...).
+    match /products/{docId} {
+      allow read: if isStaff(request.auth.uid);
+      allow create: if isAdmin(request.auth.uid) || isRole(request.auth.uid, 'storekeeper');
+      allow update: if isAdmin(request.auth.uid)
+        || isRole(request.auth.uid, 'storekeeper')
+        || (isRole(request.auth.uid, 'employee')
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock', 'updatedAt']));
+      allow delete: if isAdmin(request.auth.uid);
+    }
+
+    // customers — يُنشأ/يُحدَّث ضمن تدفق الطلبات (admin/employee) وتحصيل
+    // المدفوعات (admin/accountant). storekeeper لا يحتاج الوصول (لا يظهر
+    // "العملاء" في قائمته أصلاً — permissions.js/NAV_BY_ROLE).
+    match /customers/{docId} {
+      allow read: if isStaff(request.auth.uid);
+      allow write: if isAdmin(request.auth.uid)
+        || isRole(request.auth.uid, 'employee')
+        || isRole(request.auth.uid, 'accountant');
+    }
+
+    // suppliers — canAddSupplier: admin فقط لإنشاء مورد جديد. تحديث الرصيد
+    // يحدث تلقائياً من عدة تدفقات (منتجات/طلبات/مدفوعات) لذا التحديث مفتوح
+    // لكل عضو فريق نشط، لكن الإنشاء والحذف للمدير فقط.
+    match /suppliers/{docId} {
+      allow read: if isStaff(request.auth.uid);
+      allow create: if isAdmin(request.auth.uid);
+      allow update: if isStaff(request.auth.uid);
+      allow delete: if isAdmin(request.auth.uid);
+    }
+
+    // orders — canCreateOrder/canUpdateOrderStatus: admin/employee. المحاسب
+    // يحتاج كتابة عند تخصيص دفعة مستقلة على فواتير العميل (createPaymentRecord).
+    // ⚠️ قيد "الكاشير يرى فواتير يومه فقط" (canViewAllOrders) يبقى على مستوى
+    // الواجهة فقط — تقييده هنا بأمان يتطلب تخزين uid المُنشئ لكل طلب وربطه
+    // بتاريخ اليوم داخل القاعدة، وهو تغيير في شكل البيانات لم أنفّذه بدون
+    // اختبار مباشر معكم.
+    match /orders/{docId} {
+      allow read: if isStaff(request.auth.uid);
+      allow create: if isAdmin(request.auth.uid) || isRole(request.auth.uid, 'employee');
+      allow update: if isAdmin(request.auth.uid)
+        || isRole(request.auth.uid, 'employee')
+        || isRole(request.auth.uid, 'accountant');
+      allow delete: if isAdmin(request.auth.uid);
+    }
+
+    // payments — canRecordPayment: admin/accountant (شاشة PaymentModal يدوياً).
+    // الكاشير (employee) يحتاج إنشاء سجل دفعة تلقائي عند فتح طلب بعربون
+    // (createOrder → createPaymentRecord)، لذا يُسمح له بالإنشاء فقط، لا التعديل.
+    match /payments/{docId} {
+      allow read: if isStaff(request.auth.uid);
+      allow create: if isAdmin(request.auth.uid)
+        || isRole(request.auth.uid, 'employee')
+        || isRole(request.auth.uid, 'accountant');
+      allow update: if isAdmin(request.auth.uid) || isRole(request.auth.uid, 'accountant');
+      allow delete: if isAdmin(request.auth.uid);
+    }
+
+    // supplierReturns / supplierTransactions — سجل داخلي يُكتب من عدة تدفقات
+    // (منتجات/طلبات/مدفوعات) عبر أدوار مختلفة؛ الحذف للمدير فقط لحماية السجل.
+    match /supplierReturns/{docId} {
+      allow read: if isStaff(request.auth.uid);
+      allow create, update: if isStaff(request.auth.uid);
+      allow delete: if isAdmin(request.auth.uid);
+    }
+    match /supplierTransactions/{docId} {
+      allow read: if isStaff(request.auth.uid);
+      allow create, update: if isStaff(request.auth.uid);
+      allow delete: if isAdmin(request.auth.uid);
+    }
+
+    // expenses — canManageExpenses: admin/accountant فقط (قراءة وكتابة).
+    // شاشة المصروفات أصلاً غير ظاهرة لـ employee/storekeeper في القائمة
+    // الجانبية (NAV_BY_ROLE)، فتقييد القراءة هنا آمن ولا يكسر أي تدفق حالي.
+    match /expenses/{docId} {
+      allow read: if isAdmin(request.auth.uid) || isRole(request.auth.uid, 'accountant');
+      allow write: if isAdmin(request.auth.uid) || isRole(request.auth.uid, 'accountant');
+    }
+
+    // ————— حسابات النظام users —————
+    // V3.51 — قراءة سجلات المستخدمين للمدير فقط + صاحب المستند نفسه (بمعرّف
+    // uid أو ببريده الموثّق من Firebase عند تسجيل الدخول). كان أي عضو فريق
+    // يقرأ كامل الجدول بما فيه passwordHash/Salt (وأي حقول password نصية
+    // متبقية من الورث/الاستيراد). تسجيل الدخول يجرّب الآن جلب مستند المستخدم
+    // الحالي عبر استعلام مستهدف (uid ثم email) قبل الفحص العام، فلا تُكسر
+    // جلسة الموظف على متصفح جديد.
+    match /users/{docId} {
+      allow read: if isAdmin(request.auth.uid)
+        || request.auth.uid == resource.data.uid
+        || request.auth.token.email == resource.data.email;
+      allow create: if isAdmin(request.auth.uid) || isSeedUserBootstrap(request.auth.uid, docId);
+      allow update: if isAdmin(request.auth.uid) || isSelfUpdate(request.auth.uid);
+      allow delete: if isAdmin(request.auth.uid);
+    }
+
+    function isSelfUpdate(uid) {
+      let isUidBackfill =
+        request.auth.uid == uid
+        && resource.data.uid == null
+        && request.resource.data.uid == uid
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.email == resource.data.email;
+
+      let isPasswordChange =
+        request.auth.uid == uid
+        && resource.data.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.passwordHash is string
+        && request.resource.data.passwordSalt is string
+        // V3.52 — كلمة السر تُخزَّن كـ PBKDF2 hash فقط؛ يُمنع هذا المسار من كتابة
+        // أي password نصي (يغطي تغيير كلمة السر والمهاجرة من النص القديم معاً).
+        && request.resource.data.password == null;
+
+      return isUidBackfill || isPasswordChange;
+    }
+
+    // ————— إعدادات النظام settings —————
+    // V3.51 — appSettings (الشكل/العلامة) مقروءة لكل عضو فريق، أما
+    // settings/syncConfig (إعدادات الربط بجوجل شيت) فللمدير فقط. كانت
+    // syncConfig مقروءة لأي موظف، وبها تُكتب سابقاً أسرار OAuth (V3.51
+    // نظّفتها من السحابة أيضاً في _persistConfig).
+    // V3.58 — إنشاء settings/staffBootstrapDone مسموح به لبوابة البوتستراف
+    // الأول فقط (انظر isBootstrapMarkerWrite) — هو مفتاح إغلاق نهائي لا
+    // يُعدَّل ولا يُحذف (البلوك الخاص أدناه).
+    match /settings/{docId} {
+      allow read: if isStaff(request.auth.uid) && docId != 'syncConfig';
+      allow create: if isAdmin(request.auth.uid)
+        || (docId == 'staffBootstrapDone' && isBootstrapMarkerWrite(request.auth.uid));
+      allow update: if isAdmin(request.auth.uid);
+      allow delete: if isAdmin(request.auth.uid);
+    }
+    match /settings/syncConfig {
+      allow read: if isAdmin(request.auth.uid);
+      allow write: if isAdmin(request.auth.uid);
+    }
+    // V3.58 — المفتاح نهائي: لا تعديل ولا حذف. القراءة مسموحة لكل عضو فريق
+    // (ولأي حساب موقّع كي يستطيع البوتستراف الأول التحقق منه إن لزم).
+    match /settings/staffBootstrapDone {
+      allow read: if isStaff(request.auth.uid) || isSignedIn();
+      allow create: if isBootstrapMarkerWrite(request.auth.uid);
+      allow update, delete: if false;
+    }
+  }
+}

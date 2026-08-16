@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🧙 معالج تخصيص العميل — أداة المطور</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface2: #334155;
+      --border: #334155;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #0ea5e9;
+      --accent-dark: #0284c7;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --radius: 10px;
+    }
+
+    body {
+      font-family: 'Segoe UI', 'Arial', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px 16px;
+    }
+
+    .container { max-width: 900px; margin: 0 auto; }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%);
+      border: 1px solid #1d4ed8;
+      border-radius: 14px;
+      padding: 20px 24px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .header-icon { font-size: 2.2rem; }
+    .header h1 { font-size: 1.2rem; font-weight: 700; color: #7dd3fc; }
+    .header p { font-size: 0.8rem; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+    .dev-badge {
+      margin-right: auto;
+      background: #1d4ed8;
+      color: #bfdbfe;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      white-space: nowrap;
+      border: 1px solid #3b82f6;
+    }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+      overflow-x: auto;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 7px 14px;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .tab-btn:hover { color: var(--text); background: var(--surface2); }
+    .tab-btn.active { background: var(--accent-dark); color: #fff; border-color: var(--accent); box-shadow: 0 2px 10px rgba(14,165,233,0.25); }
+    .tab-btn.active-export { background: #059669; color: #fff; border-color: var(--emerald); }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 18px;
+    }
+    .card-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── Grid ── */
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+    .span-2 { grid-column: 1 / -1; }
+
+    /* ── Fields ── */
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+    .field input, .field select, .field textarea {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text);
+      font-size: 0.83rem;
+      padding: 8px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+      font-family: inherit;
+      width: 100%;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
+    .field input[type="color"] {
+      padding: 3px 6px;
+      height: 38px;
+      cursor: pointer;
+    }
+    .field .hint { font-size: 0.7rem; color: var(--muted); }
+    .color-row { display: flex; align-items: center; gap: 10px; }
+    .color-row input[type="color"] { width: 44px; flex-shrink: 0; }
+    .color-row input[type="text"] { flex: 1; }
+    .color-presets { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 8px; }
+    .color-preset {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.1s, border-color 0.1s;
+    }
+    .color-preset:hover { transform: scale(1.2); border-color: white; }
+
+    /* ── Tags / Badges ── */
+    .tags-row { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; }
+    .tags-row input { flex: 1; }
+    .tags { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 4px; }
+    .tag {
+      background: #1e293b;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tag button {
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); font-size: 14px; line-height: 1;
+      padding: 0;
+    }
+    .tag button:hover { color: var(--rose); }
+
+    /* ── Buttons ── */
+    .btn {
+      border-radius: 7px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 8px 16px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      transition: opacity 0.15s, background 0.15s;
+    }
+    .btn:hover { opacity: 0.88; }
+    .btn-primary { background: var(--accent-dark); color: #fff; }
+    .btn-success { background: #059669; color: #fff; }
+    .btn-secondary { background: var(--surface2); color: var(--text); }
+    .btn-sm { padding: 6px 12px; font-size: 0.75rem; }
+
+    /* ── Validation ── */
+    .alert-error {
+      background: rgba(244,63,94,0.1);
+      border: 1px solid rgba(244,63,94,0.3);
+      border-radius: 8px;
+      color: #fca5a5;
+      font-size: 0.78rem;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .alert-warn {
+      background: rgba(245,158,11,0.1);
+      border: 1px solid rgba(245,158,11,0.3);
+      border-radius: 8px;
+      color: #fcd34d;
+      font-size: 0.75rem;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+    }
+
+    /* ── Code Output ── */
+    pre.code-output {
+      background: #020817;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: #7dd3fc;
+      font-family: 'Consolas', 'Fira Code', monospace;
+      font-size: 0.75rem;
+      max-height: 380px;
+      overflow: auto;
+      padding: 16px;
+      text-align: left;
+      direction: ltr;
+      white-space: pre;
+      line-height: 1.6;
+    }
+    pre.code-output.firebase-code { color: #fcd34d; }
+
+    .export-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .export-actions small { color: var(--muted); font-size: 0.75rem; }
+    .export-actions code { color: #7dd3fc; font-size: 0.78rem; }
+
+    /* ── Tab panels ── */
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #10b981;
+      color: #fff;
+      border-radius: 10px;
+      padding: 12px 22px;
+      font-size: 0.83rem;
+      font-weight: 600;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      transition: transform 0.25s ease;
+      z-index: 9999;
+      pointer-events: none;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+    #toast.error-toast { background: var(--rose); }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-icon">🧙</div>
+    <div>
+      <h1>معالج تخصيص العميل — Client Configuration Wizard</h1>
+      <p>أداة مطور منفصلة لتوليد <code style="color:#7dd3fc">src/client/config.js</code> وإعدادات Firebase لكل عميل جديد قبل البناء والنشر.</p>
+    </div>
+    <div class="dev-badge">🛠 DEV TOOL ONLY</div>
+  </div>
+
+  <div class="alert-warn">
+    ⚠️ هذه الأداة مخصصة للمطور فقط — لا تُرسل للعميل ولا تُشغَّل داخل التطبيق.
+    افتح الملف مباشرة في المتصفح، أملأ البيانات، ثم حمّل الملفات وضعها في المشروع قبل البناء.
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('branding')">🏪 الهوية والبراند</button>
+    <button class="tab-btn" onclick="switchTab('region')">🌐 العملة والمنطقة</button>
+    <button class="tab-btn" onclick="switchTab('categories')">🏷️ التصنيفات</button>
+    <button class="tab-btn" onclick="switchTab('firebase')">🔥 Firebase</button>
+    <button class="tab-btn" onclick="switchTab('integrations')">🔌 الربط والخدمات</button>
+    <button class="tab-btn" onclick="switchTab('export')">📦 تصدير الملفات</button>
+  </div>
+
+  <!-- Validation Error -->
+  <div id="validation-error" class="alert-error" style="display:none">
+    <span>⚠️</span>
+    <span id="validation-error-text"></span>
+  </div>
+
+  <!-- ═══ TAB 1: Branding ═══ -->
+  <div id="tab-branding" class="tab-panel active">
+    <div class="card">
+      <div class="card-title">🏪 هوية المتجر وعزل البيانات (Branding &amp; Isolation)</div>
+      <div class="grid">
+        <div class="field">
+          <label>معرّف العميل الفريد (clientId) *</label>
+          <input id="clientId" type="text" value="aladdin" placeholder="aladdin_store, baraka_pos ..." oninput="update()">
+          <div class="hint">أحرف إنجليزية صغيرة وأرقام وشرطة سفلية فقط — يُسبَق به كل مفتاح تخزين محلي</div>
+        </div>
+        <div class="field">
+          <label>اسم المتجر (appName) *</label>
+          <input id="appName" type="text" value="علاء الدين" oninput="update()">
+        </div>
+        <div class="field">
+          <label>الشعار النصي (tagline)</label>
+          <input id="tagline" type="text" value="للبطاطين والمفروشات" oninput="update()">
+        </div>
+        <div class="field">
+          <label>اسم ملف الشعار داخل public/ (logo) — بدون /</label>
+          <input id="logo" type="text" value="2.png" oninput="update()">
+          <p class="hint">ضع ملف الصورة في مجلد public/ بنفس هذا الاسم بالظبط (مثال: 2.png).</p>
+        </div>
+        <div class="field span-2">
+          <label>اللون الأساسي للبراند (primaryColor)</label>
+          <div class="color-row">
+            <input type="color" id="primaryColorPicker" value="#0284c7" oninput="syncColor('picker')">
+            <input type="text" id="primaryColor" value="#0284c7" oninput="syncColor('text')">
+          </div>
+          <div class="color-presets">
+            <div class="color-preset" style="background:#0284c7" title="#0284c7" onclick="setColor('#0284c7')"></div>
+            <div class="color-preset" style="background:#0ea5e9" title="#0ea5e9" onclick="setColor('#0ea5e9')"></div>
+            <div class="color-preset" style="background:#7c3aed" title="#7c3aed" onclick="setColor('#7c3aed')"></div>
+            <div class="color-preset" style="background:#16a34a" title="#16a34a" onclick="setColor('#16a34a')"></div>
+            <div class="color-preset" style="background:#dc2626" title="#dc2626" onclick="setColor('#dc2626')"></div>
+            <div class="color-preset" style="background:#f59e0b" title="#f59e0b" onclick="setColor('#f59e0b')"></div>
+            <div class="color-preset" style="background:#db2777" title="#db2777" onclick="setColor('#db2777')"></div>
+            <div class="color-preset" style="background:#334155" title="#334155" onclick="setColor('#334155')"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label>المظهر الافتراضي (theme)</label>
+          <select id="theme" onchange="update()">
+            <option value="dark">🌙 داكن (افتراضي)</option>
+            <option value="light">☀️ فاتح</option>
+            <option value="ocean">🌊 محيطي</option>
+            <option value="emerald">💎 زمردي</option>
+            <option value="royal">👑 ملكي</option>
+            <option value="coffee">☕ قهوة</option>
+            <option value="luxury-gold">✨ ذهبي فاخر</option>
+            <option value="graphite">⚫ جرافيت</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB 2: Region ═══ -->
+  <div id="tab-region" class="tab-panel">
+    <div class="card">
+      <div class="card-title">🌐 العملة والمنطقة الزمنية</div>
+      <div class="grid">
+        <div class="field">
+          <label>رمز العملة (symbol) *</label>
+          <input id="currencySymbol" type="text" value="ج.م" oninput="update()">
+        </div>
+        <div class="field">
+          <label>منطقة تنسيق الأرقام (locale) *</label>
+          <input id="currencyLocale" type="text" value="ar-EG" placeholder="ar-EG, ar-SA, en-US" oninput="update()">
+        </div>
+        <div class="field">
+          <label>المنطقة الزمنية (timeZone)</label>
+          <select id="timeZone" onchange="update()">
+            <option value="Africa/Cairo">🇪🇬 مصر (Africa/Cairo)</option>
+            <option value="Asia/Riyadh">🇸🇦 السعودية / الخليج (Asia/Riyadh)</option>
+            <option value="Asia/Dubai">🇦🇪 الإمارات (Asia/Dubai)</option>
+            <option value="Asia/Amman">🇯🇴 الأردن (Asia/Amman)</option>
+            <option value="UTC">🌍 توقيت غرينتش (UTC)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>المحافظة / المنطقة الافتراضية</label>
+          <input id="defaultGovernorate" type="text" value="القاهرة" oninput="update()">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB 3: Categories ═══ -->
+  <div id="tab-categories" class="tab-panel">
+    <div class="card">
+      <div class="card-title">👥 تصنيفات العملاء (customerCategories)</div>
+      <div class="tags-row">
+        <input id="newCustCat" type="text" placeholder="أدخل تصنيف عميل جديد..." onkeydown="if(event.key==='Enter'){event.preventDefault();addCustCat()}">
+        <button class="btn btn-secondary btn-sm" onclick="addCustCat()">➕ إضافة</button>
+      </div>
+      <div class="tags" id="custCatTags"></div>
+      <div class="field" style="margin-top:14px">
+        <label>التصنيف الافتراضي (defaultCustomerCategory)</label>
+        <select id="defaultCustomerCategory" onchange="update()"></select>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">💸 أصناف المصروفات (expenseCategories)</div>
+      <div class="tags-row">
+        <input id="newExpCat" type="text" placeholder="أدخل صنف مصروفات جديد..." onkeydown="if(event.key==='Enter'){event.preventDefault();addExpCat()}">
+        <button class="btn btn-secondary btn-sm" onclick="addExpCat()">➕ إضافة</button>
+      </div>
+      <div class="tags" id="expCatTags"></div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB 4: Firebase ═══ -->
+  <div id="tab-firebase" class="tab-panel">
+    <div class="card">
+      <div class="card-title">📋 لصق كود الإعدادات السريع (Paste Firebase Snippet)</div>
+      <div class="field">
+        <label>انسخ والصق كود إعدادات Firebase بالكامل (Web SDK Config Block) هنا وسنقوم باستخراج الحقول تلقائياً:</label>
+        <textarea id="firebaseSnippetInput" rows="5" placeholder='const firebaseConfig = {
+  apiKey: "AIzaSy...",
+  authDomain: "...",
+  ...
+};' style="font-family: monospace; font-size: 0.78rem; direction: ltr; text-align: left;"></textarea>
+        <div style="margin-top: 10px;">
+          <button class="btn btn-secondary btn-sm" onclick="parseFirebaseSnippet()">⚡ استخراج البيانات تلقائياً</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🔥 بيانات اعتماد مشروع Firebase الفردية</div>
+      <div class="grid">
+        <div class="field">
+          <label>مفتاح المشروع (apiKey)</label>
+          <input id="firebaseApiKey" type="text" placeholder="AIzaSy..." oninput="update()">
+        </div>
+        <div class="field">
+          <label>نطاق المصادقة (authDomain)</label>
+          <input id="firebaseAuthDomain" type="text" placeholder="project-id.firebaseapp.com" oninput="update()">
+        </div>
+        <div class="field">
+          <label>معرّف المشروع (projectId)</label>
+          <input id="firebaseProjectId" type="text" placeholder="my-store-pos" oninput="update()">
+        </div>
+        <div class="field">
+          <label>حاوية التخزين (storageBucket)</label>
+          <input id="firebaseStorageBucket" type="text" placeholder="my-store-pos.firebasestorage.app" oninput="update()">
+        </div>
+        <div class="field">
+          <label>معرف إرسال الرسائل (messagingSenderId)</label>
+          <input id="firebaseMessagingSenderId" type="text" placeholder="1234567890" oninput="update()">
+        </div>
+        <div class="field">
+          <label>معرّف التطبيق (appId)</label>
+          <input id="firebaseAppId" type="text" placeholder="1:1234567890:web:abc123" oninput="update()">
+        </div>
+        <div class="field">
+          <label>معرف القياس (measurementId) — اختياري</label>
+          <input id="firebaseMeasurementId" type="text" placeholder="G-XXXXXXXXXX" oninput="update()">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB 5: Integrations ═══ -->
+  <div id="tab-integrations" class="tab-panel">
+    <div class="card">
+      <div class="card-title">🤖 خدمات الذكاء الاصطناعي (AI Services)</div>
+      <div class="grid">
+        <div class="field">
+          <label>مزوّد الذكاء الاصطناعي (aiProvider)</label>
+          <select id="aiProvider" onchange="update()">
+            <option value="gemini">Google Gemini</option>
+            <option value="openai">OpenAI</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>اسم النموذج (aiModel)</label>
+          <input id="aiModel" type="text" value="gemini-2.0-flash-lite" placeholder="gemini-2.0-flash-lite / gpt-4o-mini" oninput="update()">
+        </div>
+        <div class="field span-2">
+          <label>مفتاح API لـ Google Gemini (geminiApiKey)</label>
+          <input id="geminiApiKey" type="text" placeholder="AIzaSy..." oninput="update()">
+          <div class="hint">مفتاح API المستخدم لتشغيل المساعد الذكي المدمج في النظام</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📊 ربط المزامنة مع Google Sheets</div>
+      <div class="grid">
+        <div class="field span-2">
+          <label>رابط Web App Script (webhookUrl) — V3.59</label>
+          <input id="webhookUrl" type="text" placeholder="https://script.google.com/macros/s/.../exec" oninput="update()">
+          <div class="hint">رابط Web App المُنشَر (exec) — الاتصال الوحيد للمزامنة. يُحقن وقت البناء عبر VITE_SYNC_WEBHOOK_URL إن ضبطته، أو يُدخل لاحقاً في الإعدادات.</div>
+        </div>
+        <div class="field">
+          <label>اتجاه المزامنة (syncDirection)</label>
+          <select id="syncDirection" onchange="update()">
+            <option value="export">تصدير فقط (export)</option>
+            <option value="import">استيراد فقط (import)</option>
+            <option value="both">بالاتجاهين (both)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>تكرار المزامنة (syncFrequency)</label>
+          <select id="syncFrequency" onchange="update()">
+            <option value="manual">يدوي (manual)</option>
+            <option value="every-op">مع كل عملية (every-op)</option>
+            <option value="15m">كل 15 دقيقة (15m)</option>
+            <option value="1h">كل ساعة (1h)</option>
+          </select>
+        </div>
+        <div class="field span-2" style="flex-direction: row; align-items: center; gap: 10px; padding: 10px 0;">
+          <input id="autoSyncEnabled" type="checkbox" style="width: 18px; height: 18px; cursor: pointer;" onchange="update()">
+          <label for="autoSyncEnabled" style="cursor: pointer; user-select: none;">تمكين المزامنة التلقائية (autoSyncEnabled)</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB 6: Export ═══ -->
+  <div id="tab-export" class="tab-panel">
+    <!-- config.js -->
+    <div class="card">
+      <div class="card-title">📄 ملف <code>src/client/config.js</code></div>
+      <div class="export-actions">
+        <small>انسخ الكود أو حمّله ثم ضعه في <code>src/client/config.js</code> قبل البناء</small>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="copyConfig()">📋 نسخ</button>
+          <button class="btn btn-primary btn-sm" onclick="downloadConfig()">⬇️ تحميل config.js</button>
+        </div>
+      </div>
+      <pre class="code-output" id="configOutput"></pre>
+    </div>
+
+    <!-- Firebase config -->
+    <div class="card">
+      <div class="card-title">🔥 إعدادات Firebase لـ <code>src/services/db.js</code></div>
+      <div class="export-actions">
+        <small>استبدل كتلة <code>FALLBACK_FIREBASE_CONFIG</code> في <code>src/services/db.js</code></small>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="copyFirebase()">📋 نسخ</button>
+          <button class="btn btn-success btn-sm" onclick="downloadFirebase()">⬇️ تحميل firebase-config.js</button>
+        </div>
+      </div>
+      <pre class="code-output firebase-code" id="firebaseOutput"></pre>
+    </div>
+
+    <!-- Bootstrap Init Script -->
+    <div class="card">
+      <div class="card-title">⚡ Bootstrap Initializer — <code>bootstrapInit.js</code></div>
+      <div class="export-actions">
+        <small>الصق هذا الكود في <strong>Console المتصفح</strong> (F12) بعد فتح التطبيق لأول مرة لملء إعدادات localStorage تلقائياً بالمفاتيح الصحيحة</small>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="copyBootstrap()">📋 نسخ</button>
+          <button class="btn btn-primary btn-sm" onclick="downloadBootstrap()">⬇️ تحميل bootstrapInit.js</button>
+        </div>
+      </div>
+      <pre class="code-output" id="bootstrapOutput" style="border-color:#7c3aed33;background:#0f172a"></pre>
+    </div>
+
+    <!-- Instructions -->
+    <div class="card">
+      <div class="card-title">📋 خطوات النشر لعميل جديد</div>
+      <ol style="padding-right:18px;line-height:2.2;font-size:0.82rem;color:#cbd5e1">
+        <li>أملأ البيانات في التبويبات أعلاه</li>
+        <li>انتقل لتبويب <strong>تصدير</strong> وحمّل <code>config.js</code></li>
+        <li>استبدل <code>src/client/config.js</code> بالملف المحمّل</li>
+        <li>انسخ <code>FALLBACK_FIREBASE_CONFIG</code> وضعه في <code>src/services/db.js</code></li>
+        <li>افتح التطبيق في المتصفح ثم الصق كود <strong>Bootstrap Initializer</strong> في الـ Console (F12) لملء إعدادات الربط والذكاء الاصطناعي في <code>localStorage</code> تلقائياً</li>
+        <li>شغّل <code>npm run build</code> وارفع مجلد <code>dist/</code> للخادم</li>
+      </ol>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+  // ═══════════════════════════════════════════════════════
+  //  State
+  // ═══════════════════════════════════════════════════════
+  let customerCategories = ['تاجر جملة','تاجر تجزئة','عميل قطاعي / فردي','جمعية خيرية / مؤسسة','معرض / وكيل','عميل محتمل']
+  let expenseCategories  = ['عمومية','إيجارات','كهرباء ومرافق','أجور ومرتبات','تغليف ومطبوعات','شحن ونقل']
+
+  // ═══════════════════════════════════════════════════════
+  //  Tabs
+  // ═══════════════════════════════════════════════════════
+  function switchTab(tab) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'))
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active','active-export'))
+    document.getElementById('tab-' + tab).classList.add('active')
+    const btns = document.querySelectorAll('.tab-btn')
+    const idx = ['branding','region','categories','firebase','integrations','export'].indexOf(tab)
+    if (idx >= 0) {
+      btns[idx].classList.add(tab === 'export' ? 'active-export' : 'active')
+    }
+    update()
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  Color sync
+  // ═══════════════════════════════════════════════════════
+  function syncColor(source) {
+    if (source === 'picker') {
+      document.getElementById('primaryColor').value = document.getElementById('primaryColorPicker').value
+    } else {
+      const v = document.getElementById('primaryColor').value.trim()
+      if (/^#[0-9a-fA-F]{6}$/.test(v)) document.getElementById('primaryColorPicker').value = v
+    }
+    update()
+  }
+  function setColor(c) {
+    document.getElementById('primaryColor').value = c
+    document.getElementById('primaryColorPicker').value = c
+    update()
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  Category management
+  // ═══════════════════════════════════════════════════════
+  function renderCustCats() {
+    const el = document.getElementById('custCatTags')
+    el.innerHTML = customerCategories.map(c => `
+      <span class="tag">${c}
+        <button onclick="removeCustCat('${c.replace(/'/g,"\\'")}')">×</button>
+      </span>`).join('')
+    const sel = document.getElementById('defaultCustomerCategory')
+    const prev = sel.value
+    sel.innerHTML = customerCategories.map(c => `<option value="${c}">${c}</option>`).join('')
+    if (customerCategories.includes(prev)) sel.value = prev
+    update()
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  Expense categories management
+  // ═══════════════════════════════════════════════════════
+  function renderExpCats() {
+    const el = document.getElementById('expCatTags')
+    el.innerHTML = expenseCategories.map(c => `
+      <span class="tag">${c}
+        <button onclick="removeExpCat('${c.replace(/'/g,"\\'")}')">×</button>
+      </span>`).join('')
+    update()
+  }
+
+  function addCustCat() {
+    const v = document.getElementById('newCustCat').value.trim()
+    if (v && !customerCategories.includes(v)) { customerCategories.push(v); renderCustCats() }
+    document.getElementById('newCustCat').value = ''
+  }
+  function removeCustCat(c) {
+    customerCategories = customerCategories.filter(x => x !== c); renderCustCats()
+  }
+  function addExpCat() {
+    const v = document.getElementById('newExpCat').value.trim()
+    if (v && !expenseCategories.includes(v)) { expenseCategories.push(v); renderExpCats() }
+    document.getElementById('newExpCat').value = ''
+  }
+  function removeExpCat(c) {
+    expenseCategories = expenseCategories.filter(x => x !== c); renderExpCats()
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  Validation
+  // ═══════════════════════════════════════════════════════
+  function validate() {
+    const id = (document.getElementById('clientId').value || '').trim().toLowerCase()
+    const name = (document.getElementById('appName').value || '').trim()
+    if (!id) return 'معرّف العميل (clientId) مطلوب'
+    if (!/^[a-z0-9_]+$/.test(id)) return 'معرّف العميل: أحرف إنجليزية صغيرة وأرقام وشرطة سفلية فقط'
+    if (!name) return 'اسم المتجر (appName) مطلوب'
+    return null
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  Code generation
+  // ═══════════════════════════════════════════════════════
+  function g(id) { return (document.getElementById(id).value || '').trim() }
+
+  function generateConfig() {
+    const custCatsJson = JSON.stringify(customerCategories, null, 4)
+      .split('\n').map((l,i) => i===0?l:'  '+l).join('\n')
+    const expCatsJson = JSON.stringify(expenseCategories, null, 4)
+      .split('\n').map((l,i) => i===0?l:'  '+l).join('\n')
+
+    return `/**
+ * =============================================================================
+ * client.config.js — ملف تخصيص العميل الوحيد (Client Config)
+ * =============================================================================
+ * تم إنشاؤه عبر معالج التخصيص (Client Configuration Wizard — dev tool).
+ * تاريخ التوليد: ${new Date().toISOString()}
+ *
+ * ملاحظة أمان (v2): القيم الحساسة (Google OAuth Client ID/Secret + مفتاح Gemini)
+ * لا تُحفر في المستودع إطلاقاً؛ تُحقن وقت البناء من GitHub Actions Secrets عبر
+ * متغيرات البيئة VITE_* — إن تُركت الحقول الحساسة فارغة في المعالج.
+ * =============================================================================
+ */
+
+const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : {}
+
+export const CLIENT = {
+  // ---------------------------------------------------------------------------
+  // 0) معرّف العميل — يمنع تداخل مفاتيح localStorage
+  // ---------------------------------------------------------------------------
+  clientId: '${g('clientId').toLowerCase()}',
+
+  // ---------------------------------------------------------------------------
+  // 1) هوية المتجر والبراند
+  // ---------------------------------------------------------------------------
+  appName: '${g('appName')}',
+  tagline: '${g('tagline')}',
+  logo: '${(g('logo') || '2.png').replace(/^\/+/, '')}',
+  primaryColor: '${g('primaryColor')}',
+  theme: '${g('theme')}',
+
+  // ---------------------------------------------------------------------------
+  // 1b) علم تهيئة السحابة — مشروع Firebase المدمج هو مشروع العميل الفعلي،
+  //     فيُخفى تنبيه "الإنتاج الاحتياطي" (Production Guard).
+  // ---------------------------------------------------------------------------
+  firebaseIsClientProject: true,
+
+
+  // ---------------------------------------------------------------------------
+  // 2) العملة وتنسيق الأرقام
+  // ---------------------------------------------------------------------------
+  currency: {
+    symbol: '${g('currencySymbol')}',
+    locale: '${g('currencyLocale')}',
+  },
+
+  // ---------------------------------------------------------------------------
+  // 3) المنطقة والتوقيت
+  // ---------------------------------------------------------------------------
+  region: {
+    timeZone: '${g('timeZone')}',
+    defaultGovernorate: '${g('defaultGovernorate')}',
+    governorates: {
+      'القاهرة': ['مدينة نصر', 'مصر الجديدة', 'المعادي', 'التجمع الخامس', 'حلوان', 'شبرا', 'وسط البلد', 'عين شمس', 'المقطم', 'النزهة', 'الزمالك', 'المرج', 'السلام', 'الأميرية', 'الزيتون', 'الشرابية', 'روض الفرج', 'بولاق', 'باب الشعرية', 'الموسكي', 'الجمالية', 'الدرب الأحمر', 'الخليفة', 'المطرية', 'الوايلي', 'السيدة زينب', 'المعصرة', 'البساتين', 'دار السلام', 'طرة', '15 مايو', 'القطامية', 'مدينة الشروق', 'مدينة بدر', 'قصر النيل', 'الزاوية الحمراء', 'حدائق القبة'],
+      'الجيزة': ['الدقي', 'المهندسين', 'الهرم', 'فيصل', '6 أكتوبر', 'الشيخ زايد', 'إمبابة', 'العجوزة', 'العياط', 'البدرشين', 'الصف', 'أطفيح', 'الواحات البحرية', 'بولاق الدكرور', 'الوراق', 'كرداسة', 'أبو النمرس', 'الحوامدية', 'منشأة القناطر', 'سقارة', 'المنصورية', 'نزلة السمان', 'المنيب', 'المريوطية', 'أوسيم'],
+      'الإسكندرية': ['سموحة', 'المنتزه', 'سيدي بشر', 'العجمي', 'محرم بك', 'ستانلي', 'ميامي', 'برج العرب', 'عامرية', 'باب شرقي', 'الشاطبي', 'سيدي جابر', 'لوران', 'فيكتوريا', 'رشدي', 'سابا باشا', 'العصافرة', 'المندرة', 'سيدي كرير', 'أبو قير', 'الدخيلة', 'المنشية', 'الرمل', 'غيط العنب', 'كرموز', 'محطة الرمل', 'أنطونيادس', 'الإبراهيمية', 'الظاهرية', 'كوم الشقافة'],
+      'الدقهلية': ['المنصورة', 'ميت غمر', 'طلخا', 'دكرنس', 'سنبلاوين', 'شربين', 'منزلة', 'بلقاس', 'أجا', 'بني عبيد', 'نبروه', 'تمي الأمديد', 'ميت سلسيل', 'ميت سويد', 'الجمالية', 'المنصورة الجديدة', 'محلة دمنة', 'شطا', 'ميت أبو غريب'],
+      'الشرقية': ['الزقازيق', 'العاشر من رمضان', 'بلبيس', 'أبو حماد', 'فاقوس', 'منيا القمح', 'أبو كبير', 'ديرب نجم', 'الحسينية', 'أولاد صقر', 'ههيا', 'كفر صقر', 'صان الحجر', 'القرين', 'الإبراهيمية', 'مشتول السوق', 'القنايات', 'الزوامل', 'منشأة أبو عمر', 'السعادة'],
+      'القليوبية': ['بنها', 'شبرا الخيمة', 'العبور', 'طوخ', 'قليوب', 'الخانكة', 'القناطر الخيرية', 'شبين القناطر', 'كفر شكر', 'الخصوص', 'بهتيم', 'مسطرد', 'القلج', 'سندنهور', 'الصفا', 'العبور'],
+      'الغربية': ['طنطا', 'المحلة الكبرى', 'زفتى', 'كفر الزيات', 'سمنود', 'بسيون', 'قطور', 'السنطة', 'برما', 'كفر شبرا', 'المحلة', 'بلكيم', 'الغربية', 'شبرا الكبيرة'],
+      'المنوفية': ['شبين الكوم', 'منوف', 'أشمون', 'السادات', 'قويسنا', 'تلا', 'بركة السبع', 'سرس الليان', 'الباجور', 'الشهداء', 'منشأة سلطان', 'منوف الجديدة', 'ميت برة'],
+      'البحيرة': ['دمنهور', 'كفر الدوار', 'إيتاي البارود', 'أبو حمص', 'كوم حمادة', 'رشيد', 'حوش عيسى', 'إدكو', 'أبو المطامير', 'الدلنجات', 'شبراخيت', 'المحمودية', 'وادي النطرون', 'بدر', 'الرحمانية', 'نوبار', 'كفر الدوار الجديدة'],
+      'كفر الشيخ': ['كفر الشيخ', 'دسوق', 'بلطيم', 'سيدي سالم', 'بيلا', 'قلين', 'الرياض', 'فوه', 'مطوبس', 'الحامول', 'كفر الشيخ الجديدة', 'مركز البرلس', 'باقوصة'],
+      'الفيوم': ['الفيوم', 'سنورس', 'طامية', 'إطسا', 'أبشواي', 'يوسف الصديق', 'أهناسيا', 'شدموه', 'سيلا', 'الفيوم الجديدة', 'منشأة طلعت'],
+      'بني سويف': ['بني سويف', 'الواسطى', 'ببا', 'ناصر', 'إهناسيا', 'الفشن', 'سمسطا', 'بني سويف الجديدة', 'الشريفية', 'مصر العربية'],
+      'المنيا': ['المنيا', 'ملوي', 'بني مزار', 'أبو قرقاص', 'مغاغة', 'سمالوط', 'دير مواس', 'العدوة', 'مطاي', 'المنيا الجديدة', 'منها ابنوب', 'بني خالد'],
+      'أسيوط': ['أسيوط', 'ديروط', 'أبو تيج', 'القوصية', 'منفلوط', 'أبنوب', 'ساحل سليم', 'البداري', 'الغنايم', 'صدفا', 'الفتح', 'أسيوط الجديدة', 'ديروط الشريف'],
+      'سوهاج': ['سوهاج', 'طهطا', 'أخميم', 'جرجا', 'البلينا', 'المراغة', 'المنشأة', 'ساقلتة', 'جهينة', 'طما', 'دار السلام', 'سوهاج الجديدة', 'أخميم الجديدة'],
+      'قنا': ['قنا', 'نجع حمادي', 'قوص', 'دشنا', 'أبو تشت', 'فرشوط', 'الوقف', 'نقادة', 'قفط', 'دندرة', 'قنا الجديدة', 'الكرنك الجديدة'],
+      'الأقصر': ['الأقصر', 'أرمنت', 'إسنا', 'القرنة', 'الطود', 'الزينية', 'البياضية', 'البعيرات', 'الأقصر الجديدة', 'الريانية'],
+      'أسوان': ['أسوان', 'كوم أمبو', 'إدفو', 'نصر النوبة', 'دراو', 'كلابشة', 'السد العالي', 'الرديسية', 'أبوسمبل', 'أسوان الجديدة', 'سبعة', 'وادي كركر'],
+      'بورسعيد': ['حي الشرق', 'حي العرب', 'حي المناخ', 'حي الزهور', 'بورفؤاد', 'حي الضواحي', 'حي غرب', 'حي جنوب', 'مدينة السلام', 'قرية بورسعيد'],
+      'السويس': ['حي السويس', 'حي الأربعين', 'حي عتاقة', 'حي فيصل', 'حي الجناين', 'عرب المعمل', 'السويس الجديدة', 'كوبري أكتوبر'],
+      'الإسماعيلية': ['الإسماعيلية', 'التل الكبير', 'فايد', 'القنطرة شرق', 'القنطرة غرب', 'أبو صوير', 'القصاصين', 'نفيشة', 'التمساح', 'المنايف', 'سرابيوم', 'الإسماعيلية الجديدة'],
+      'دمياط': ['دمياط', 'راس البر', 'دمياط الجديدة', 'فارسكور', 'الزرقا', 'كفر سعد', 'كفر البطيخ', 'عزبة البرج', 'السرو', 'كفر ميت أبو غالب', 'دمياط القديمة'],
+      'البحر الأحمر': ['الغردقة', 'سفاجا', 'القصير', 'مرسى علم', 'رأس غارب', 'الشلاتين', 'أبو رماد', 'حماطة', 'الغردقة الجديدة', 'وادي الجمال'],
+      'جنوب سيناء': ['شرم الشيخ', 'دهب', 'نويبع', 'طور سيناء', 'طابا', 'رأس سدر', 'أبو زنيمة', 'سانت كاترين', 'النقب', 'أبو رديس'],
+      'شمال سيناء': ['العريش', 'الشيخ زويد', 'رفح', 'بئر العبد', 'الحسنة', 'نخل', 'رمانة', 'قاطية', 'الجورة', 'العريش الجديدة'],
+      'مطروح': ['مرسى مطروح', 'العلمين', 'الضبعة', 'سيوة', 'النجيلة', 'الحمام', 'رأس الحكمة', 'براني', 'السلوم', 'فوكا', 'مطروح الجديدة', 'أبيار'],
+      'الوادي الجديد': ['الخارجة', 'الداخلة', 'الفرافرة', 'باريس', 'بلاط', 'موط', 'الجديدة', 'القصر', 'الشركة']
+    },
+  },
+
+  // ---------------------------------------------------------------------------
+  // 4) قواعد العملاء والتصنيفات
+  // ---------------------------------------------------------------------------
+  customerCategories: ${custCatsJson},
+  defaultCustomerCategory: '${g('defaultCustomerCategory')}',
+
+  // ---------------------------------------------------------------------------
+  // 5) أصناف المصروفات
+  // ---------------------------------------------------------------------------
+  expenseCategories: ${expCatsJson},
+}
+
+// =============================================================================
+// BOOTSTRAP_CONFIG — قيم الإعدادات الأولية للعميل (مطابقة لمفاتيح localStorage)
+// =============================================================================
+// هذا المقطع يوثّق البنية الدقيقة لكل كائن إعدادات يُخزَّن في localStorage.
+// المفاتيح هنا تطابق تماماً ما تتوقعه الخدمات:
+//   • sheets.js       → CFG_KEY  (bms_<clientId>_data_syncConfig)
+//   • aiProvider.js   → AI_KEY   (bms_<clientId>_ai_config)
+//   • db.js           → FB_KEY   (bms_<clientId>_firebase_config)
+// =============================================================================
+
+// --- Google Sheets Sync Config (يُقرأ/يُكتب بواسطة sheets.js) ---
+// مفتاح localStorage: bms_${g('clientId').toLowerCase() || 'CLIENT_ID'}_data_syncConfig
+export const SHEETS_SYNC_CONFIG = {
+  webhookUrl:       env.VITE_SYNC_WEBHOOK_URL     || '${g('webhookUrl')}',   // رابط Web App (يُحقن وقت البناء اختيارياً)
+  direction:        '${g('syncDirection')}',        // 'export' | 'import' | 'both'
+  frequency:        '${g('syncFrequency')}',        // 'manual' | 'every-op' | '15m' | '1h'
+  enabled:          ${document.getElementById('autoSyncEnabled') ? document.getElementById('autoSyncEnabled').checked : false},
+  debounceMs:       3000,
+  lastSyncAt:       null,
+  lastSyncDirection:'',
+  lastSyncRows:     0,
+  lastSyncStatus:   'none',
+  lastSyncError:    '',
+  cfgUpdatedAt:     0,
+}
+
+// --- AI Provider Config (يُقرأ/يُكتب بواسطة aiProvider.js) ---
+// مفتاح localStorage: bms_${g('clientId').toLowerCase() || 'CLIENT_ID'}_ai_config
+export const AI_CONFIG = {
+  provider: '${g('aiProvider') || 'gemini'}',
+  apiKey:   env.VITE_GEMINI_API_KEY || '${g('geminiApiKey')}',   // مفتاح Gemini أو OpenAI — يُحقن وقت البناء (VITE_GEMINI_API_KEY)
+  model:    '${g('aiModel') || 'gemini-2.0-flash-lite'}',
+}
+
+// --- Firebase Config (يُقرأ/يُكتب بواسطة db.js / CloudSyncModal) ---
+// مفتاح localStorage: bms_${g('clientId').toLowerCase() || 'CLIENT_ID'}_firebase_config
+// (أيضاً: ضع هذه القيم في FALLBACK_FIREBASE_CONFIG بـ src/services/db.js)
+export const FALLBACK_FIREBASE_CONFIG = {
+  apiKey:            "${g('firebaseApiKey')}",
+  authDomain:        "${g('firebaseAuthDomain')}",
+  projectId:         "${g('firebaseProjectId')}",
+  storageBucket:     "${g('firebaseStorageBucket')}",
+  messagingSenderId: "${g('firebaseMessagingSenderId')}",
+  appId:             "${g('firebaseAppId')}",
+  measurementId:     "${g('firebaseMeasurementId')}"
+}
+
+// =============================================================================
+// DEFAULT_CONFIG — تجميع شامل للقيم الافتراضية بأسماء متوافقة مع الإصدارات
+// القديمة (aiProvider / aiModel / geminiApiKey) — الخدمات تقرأ من الكائنات
+// المتخصصة أعلاه، وهذا الكائن للتجميع والتوافق الخلفي.
+// =============================================================================
+export const DEFAULT_CONFIG = {
+  client: CLIENT,
+  sheets: SHEETS_SYNC_CONFIG,
+  aiProvider: AI_CONFIG.provider,
+  aiModel: AI_CONFIG.model,
+  geminiApiKey: AI_CONFIG.apiKey,
+  firebase: FALLBACK_FIREBASE_CONFIG,
+}
+`
+  }
+
+  function generateFirebaseConfig() {
+    return `// Firebase Project Configuration for ${g('appName')} (${g('clientId').toLowerCase()})
+// Generated: ${new Date().toISOString()}
+export const FALLBACK_FIREBASE_CONFIG = {
+  apiKey: "${g('firebaseApiKey')}",
+  authDomain: "${g('firebaseAuthDomain')}",
+  projectId: "${g('firebaseProjectId')}",
+  storageBucket: "${g('firebaseStorageBucket')}",
+  messagingSenderId: "${g('firebaseMessagingSenderId')}",
+  appId: "${g('firebaseAppId')}",
+  measurementId: "${g('firebaseMeasurementId')}"
+};`
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  Update / render
+  // ═══════════════════════════════════════════════════════
+  function update() {
+    const err = validate()
+    const errEl = document.getElementById('validation-error')
+    if (err) {
+      errEl.style.display = 'flex'
+      document.getElementById('validation-error-text').textContent = err
+    } else {
+      errEl.style.display = 'none'
+    }
+    // update code previews if visible
+    const co = document.getElementById('configOutput')
+    const fo = document.getElementById('firebaseOutput')
+    const bo = document.getElementById('bootstrapOutput')
+    if (co) co.textContent = generateConfig()
+    if (fo) fo.textContent = generateFirebaseConfig()
+    if (bo) bo.textContent = generateBootstrapInit()
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  Bootstrap Init Code Generator
+  // ═══════════════════════════════════════════════════════
+  function generateBootstrapInit() {
+    const cid = g('clientId').toLowerCase() || 'CLIENT_ID'
+    const prefix = `bms_${cid}_`
+    const autoSync = document.getElementById('autoSyncEnabled') ? document.getElementById('autoSyncEnabled').checked : false
+    const sheetsCfg = {
+      webhookUrl:        g('webhookUrl'),
+      direction:         g('syncDirection') || 'export',
+      frequency:         g('syncFrequency') || 'manual',
+      enabled:           autoSync,
+      debounceMs:        3000,
+      lastSyncAt:        null,
+      lastSyncDirection: '',
+      lastSyncRows:      0,
+      lastSyncStatus:    'none',
+      lastSyncError:     '',
+      cfgUpdatedAt:      0,
+    }
+    const aiCfg = {
+      provider: g('aiProvider') || 'gemini',
+      apiKey:   g('geminiApiKey'),
+      model:    g('aiModel') || 'gemini-2.0-flash-lite',
+    }
+    const fbCfg = {
+      apiKey:            g('firebaseApiKey'),
+      authDomain:        g('firebaseAuthDomain'),
+      projectId:         g('firebaseProjectId'),
+      storageBucket:     g('firebaseStorageBucket'),
+      messagingSenderId: g('firebaseMessagingSenderId'),
+      appId:             g('firebaseAppId'),
+      measurementId:     g('firebaseMeasurementId'),
+    }
+    return `// ═══════════════════════════════════════════════════════════════
+// Bootstrap Initializer — ${g('appName') || 'Client'} (${cid})
+// Generated: ${new Date().toISOString()}
+// ───────────────────────────────────────────────────────────────
+// الصق هذا الكود في Console المتصفح (F12) بعد فتح التطبيق لأول
+// مرة. يُعبّئ localStorage بالمفاتيح الصحيحة تماماً كما تتوقعها
+// خدمات: sheets.js / aiProvider.js / db.js / CloudSyncModal.
+// ═══════════════════════════════════════════════════════════════
+
+(function seedClientStorage() {
+  const PREFIX = '${prefix}';
+
+  // 1) Google Sheets Sync Config  →  sheets.js (CFG_KEY)
+  const SHEETS_KEY = PREFIX + 'data_syncConfig';
+  localStorage.setItem(SHEETS_KEY, JSON.stringify(${JSON.stringify(sheetsCfg, null, 4).split('\n').join('\n  ')}));
+
+  // 2) AI Provider Config  →  aiProvider.js (AI_KEY)
+  const AI_KEY = PREFIX + 'ai_config';
+  localStorage.setItem(AI_KEY, JSON.stringify(${JSON.stringify(aiCfg, null, 4).split('\n').join('\n  ')}));
+
+  // 3) Firebase Config  →  db.js / CloudSyncModal (FB_KEY)
+  const FB_KEY = PREFIX + 'firebase_config';
+  localStorage.setItem(FB_KEY, JSON.stringify(${JSON.stringify(fbCfg, null, 4).split('\n').join('\n  ')}));
+
+  console.info('✅ Bootstrap complete! Keys seeded for client: ${cid}');
+  console.table({ SHEETS_KEY, AI_KEY, FB_KEY });
+})();
+`
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  Copy / Download
+  // ═══════════════════════════════════════════════════════
+  function copyConfig() {
+    if (validate()) { toast(validate(), true); return }
+    navigator.clipboard.writeText(generateConfig()).then(() => toast('تم نسخ config.js 📋'))
+  }
+  function copyFirebase() {
+    navigator.clipboard.writeText(generateFirebaseConfig()).then(() => toast('تم نسخ إعدادات Firebase 📋'))
+  }
+  function downloadConfig() {
+    if (validate()) { toast(validate(), true); return }
+    download('config.js', generateConfig(), 'text/javascript')
+    toast('جاري تحميل config.js 💾')
+  }
+  function downloadFirebase() {
+    download('firebase-config.js', generateFirebaseConfig(), 'text/javascript')
+    toast('جاري تحميل firebase-config.js 💾')
+  }
+  function copyBootstrap() {
+    navigator.clipboard.writeText(generateBootstrapInit()).then(() => toast('تم نسخ Bootstrap Initializer 📋'))
+  }
+  function downloadBootstrap() {
+    download('bootstrapInit.js', generateBootstrapInit(), 'text/javascript')
+    toast('جاري تحميل bootstrapInit.js 💾')
+  }
+  function download(name, content, type) {
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([content], { type }))
+    a.download = name
+    a.click()
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  Toast
+  // ═══════════════════════════════════════════════════════
+  let _toastTimer
+  function toast(msg, isError = false) {
+    const el = document.getElementById('toast')
+    el.textContent = msg
+    el.className = isError ? 'error-toast show' : 'show'
+    clearTimeout(_toastTimer)
+    _toastTimer = setTimeout(() => { el.className = '' }, 2800)
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  Firebase Snippet Parser
+  // ═══════════════════════════════════════════════════════
+  function parseFirebaseSnippet() {
+    const raw = (document.getElementById('firebaseSnippetInput').value || '').trim()
+    if (!raw) {
+      toast('يرجى لصق الكود أولاً', true)
+      return
+    }
+
+    const keys = [
+      'apiKey',
+      'authDomain',
+      'projectId',
+      'storageBucket',
+      'messagingSenderId',
+      'appId',
+      'measurementId'
+    ]
+
+    let foundAny = false
+    keys.forEach(key => {
+      const regex = new RegExp('(?:["\']?' + key + '["\']?\\s*:\\s*["\'])([^"\']+)["\']', 'i')
+      const match = raw.match(regex)
+      if (match && match[1]) {
+        const val = match[1].trim()
+        const targetId = 'firebase' + key.charAt(0).toUpperCase() + key.slice(1)
+        const inputEl = document.getElementById(targetId)
+        if (inputEl) {
+          inputEl.value = val
+          foundAny = true
+        }
+      }
+    })
+
+    if (foundAny) {
+      toast('✓ تم استخراج وتعبئة بيانات Firebase بنجاح')
+      update()
+    } else {
+      toast('⚠️ لم يتم العثور على صيغة إعدادات Firebase معروفة.', true)
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  Init
+  // ═══════════════════════════════════════════════════════
+  renderCustCats()
+  renderExpCats()
+  update()
+</script>
+</body>
+</html>

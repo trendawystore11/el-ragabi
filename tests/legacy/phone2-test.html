@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>PHONE2-TEST</title>
+</head>
+<body>
+<div id="host"></div>
+<pre id="o">running...</pre>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/utils/formatters.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/db.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/customers.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/suppliers.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/products.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/orders.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/components/orders-dialog.js"></script>
+<script>
+(function () {
+  var out = document.getElementById('o');
+  var lines = [];
+  var failures = 0;
+  var passCount = 0;
+  function rec(name, ok, detail) {
+    if (ok) passCount++; else failures++;
+    lines.push((ok ? 'PASS' : 'FAIL') + ': ' + name + (ok ? '' : ' -> ' + detail));
+  }
+
+  window.showToast = function (msg) {
+    if (window.__toasts) window.__toasts.push(msg);
+  };
+
+  window.__toasts = [];
+
+  var host = document.getElementById('host');
+  window.openModal = function (opts) {
+    host.innerHTML = '<div class="modal-holder">' + opts.contentHTML + '</div>';
+    var holder = host.querySelector('.modal-holder');
+    var closeFn = function () {};
+    if (opts.onRender) opts.onRender(holder, closeFn);
+  };
+
+  localStorage.clear();
+  window.firestoreCache = { customers: [], suppliers: [], products: [], orders: [], payments: [], users: [], supplierReturns: [], supplierTransactions: [], expenses: [] };
+
+  var customerA = {
+    id: 'CUST-A',
+    name: 'أحمد محمد علي',
+    phone: '01153722266',
+    secondaryPhone: '01166666666',
+    category: 'عميل قطاعي / فردي',
+    address: 'القاهرة - مصر الجديدة - شارع العروبة',
+    createdAt: '2026-08-01T10:00:00Z'
+  };
+  var customerB = {
+    id: 'CUST-B',
+    name: 'محمد سامي',
+    phone: '01155555555',
+    secondaryPhone: '01155555555',
+    category: 'تاجر جملة',
+    createdAt: '2026-08-01T10:00:00Z'
+  };
+  var product = { id: 'PRD-1', name: 'بطانية صوف', stock: 50, purchasePrice: 100, sellingPrice: 150 };
+  var supplier = { id: 'SUP-1', name: 'مورد الأقمشة' };
+
+  window.saveCollection('customers', [customerA, customerB]);
+  window.saveCollection('products', [product]);
+  window.saveCollection('suppliers', [supplier]);
+
+  function openDialog() {
+    host.innerHTML = '';
+    window.__toasts = [];
+    window.openNewOrderModal();
+  }
+
+  function q(id) { return host.querySelector('#' + id); }
+
+  function typeInto(id, value) {
+    var el = q(id);
+    el.value = value;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  try {
+    // ---- T1: type secondary number into phone2 (first field empty) ----
+    openDialog();
+    typeInto('order-cust-phone-2', '01166666666');
+    rec('T1 secondary in phone2 -> primary+secondary filled',
+      q('order-cust-phone').value === '01153722266' && q('order-cust-phone-2').value === '01166666666' && q('order-cust-name').value === 'أحمد محمد علي' && !q('customer-status-badge').classList.contains('hidden'),
+      'phone=' + q('order-cust-phone').value + ' phone2=' + q('order-cust-phone-2').value + ' name=' + q('order-cust-name').value);
+
+    // ---- T2: type primary into phone1 ----
+    openDialog();
+    typeInto('order-cust-phone', '01153722266');
+    rec('T2 primary in phone1 -> primary+secondary filled, no dup',
+      q('order-cust-phone').value === '01153722266' && q('order-cust-phone-2').value === '01166666666',
+      'phone=' + q('order-cust-phone').value + ' phone2=' + q('order-cust-phone-2').value);
+
+    // ---- T3: type secondary into phone1 -> phone1 overwritten with real primary ----
+    openDialog();
+    typeInto('order-cust-phone', '01166666666');
+    rec('T3 secondary in phone1 -> phone1 becomes real primary, phone2 = secondary',
+      q('order-cust-phone').value === '01153722266' && q('order-cust-phone-2').value === '01166666666',
+      'phone=' + q('order-cust-phone').value + ' phone2=' + q('order-cust-phone-2').value);
+
+    // ---- T4: customer whose secondary === primary -> no duplication ----
+    openDialog();
+    typeInto('order-cust-phone', '01155555555');
+    rec('T4 primary==secondary -> phone2 stays empty (no duplication)',
+      q('order-cust-phone').value === '01155555555' && q('order-cust-phone-2').value === '' && q('order-cust-name').value === 'محمد سامي',
+      'phone=' + q('order-cust-phone').value + ' phone2=' + q('order-cust-phone-2').value + ' name=' + q('order-cust-name').value);
+
+    // ---- T5: NEW customer flow — an unregistered secondary number must NOT wipe
+    // manually typed fields (name/category/notes/address) — user keeps typing ----
+    openDialog();
+    typeInto('order-cust-phone', '01234567890');
+    typeInto('order-cust-name', 'محمود سمير');
+    typeInto('order-cust-phone-2', '01000000000');
+    rec('T5 unregistered secondary preserves typed name/fields',
+      q('order-cust-name').value === 'محمود سمير' && q('order-cust-phone-2').value === '01000000000' &&
+      q('order-cust-name').readOnly === false && q('customer-status-badge').classList.contains('hidden'),
+      'name=' + q('order-cust-name').value + ' phone2=' + q('order-cust-phone-2').value + ' locked=' + q('order-cust-name').readOnly);
+
+    // ---- T5b: an unregistered number typed OVER a registered match resets the
+    // AUTO-FILLED identity (not manually-typed fields) so no stale identity leaks ----
+    openDialog();
+    typeInto('order-cust-phone', '01153722266');
+    typeInto('order-cust-phone-2', '01000000000');
+    rec('T5b unregistered over a match resets auto-filled identity',
+      q('order-cust-name').value === '' && q('order-cust-name').readOnly === false &&
+      q('customer-status-badge').classList.contains('hidden'),
+      'name=' + q('order-cust-name').value + ' phone2=' + q('order-cust-phone-2').value + ' locked=' + q('order-cust-name').readOnly);
+
+    // ---- T6: clearing phone2 after a match clears fields ----
+    openDialog();
+    typeInto('order-cust-phone', '01153722266');
+    typeInto('order-cust-phone-2', '');
+    rec('T6 clearing phone2 after match clears fields',
+      q('order-cust-name').value === '' && q('order-cust-phone-2').value === '' && q('customer-status-badge').classList.contains('hidden'),
+      'name=' + q('order-cust-name').value + ' phone2=' + q('order-cust-phone-2').value);
+
+    // ---- T7: secondary typed into phone2 while a different match is active -> re-recognizes new customer ----
+    openDialog();
+    typeInto('order-cust-phone', '01153722266');
+    typeInto('order-cust-phone-2', '01155555555');
+    rec('T7 different secondary re-recognizes second customer',
+      q('order-cust-phone').value === '01155555555' && q('order-cust-phone-2').value === '' && q('order-cust-name').value === 'محمد سامي',
+      'phone=' + q('order-cust-phone').value + ' phone2=' + q('order-cust-phone-2').value + ' name=' + q('order-cust-name').value);
+
+    // ---- T8: partial number (not yet 11 digits) while no match -> no crash ----
+    openDialog();
+    typeInto('order-cust-phone-2', '0115');
+    rec('T8 partial number does not crash',
+      q('order-cust-name').value === '' && q('order-cust-phone-2').value === '0115',
+      'name=' + q('order-cust-name').value + ' phone2=' + q('order-cust-phone-2').value);
+
+  } catch (e) {
+    failures++;
+    lines.push('EXCEPTION: ' + (e && e.stack ? e.stack : String(e)));
+  }
+
+  out.textContent = (failures === 0 ? 'ALL_PASS' : 'HAS_FAILURES') + ' | total=' + (passCount + failures) + ' passed=' + passCount + ' failed=' + failures + '\n----\n' + lines.join('\n');
+  document.title = failures === 0 ? 'ALL_PASS' : 'HAS_FAILURES';
+})();
+</script>
+</body>
+</html>

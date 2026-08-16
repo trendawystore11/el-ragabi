@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>AUDIT-TEST</title>
+</head>
+<body>
+<div id="host"></div>
+<pre id="o">running...</pre>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/utils/formatters.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/db.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/customers.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/suppliers.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/products.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/orders.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/google-sheets-sync.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/utils/excel.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/components/orders-dialog.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/components/suppliers-view.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/components/products-view.js"></script>
+<script>
+(async function () {
+  var out = document.getElementById('o');
+  var lines = [];
+  var failures = 0;
+  var passCount = 0;
+  function rec(name, ok, detail) {
+    if (ok) passCount++; else failures++;
+    lines.push((ok ? 'PASS' : 'FAIL') + ': ' + name + (ok ? '' : ' -> ' + detail));
+  }
+
+  window.__toasts = [];
+  window.showToast = function (msg, type) { window.__toasts.push(String(msg)); };
+
+  // Stubs: the harness does not load payments/users modules, but the sync and
+  // excel exporters read those collections (empty here). alert() would block
+  // headless Chrome forever, so it is neutralized too.
+  window.getPayments = function () { return []; };
+  window.getPaymentsByEntity = function () { return []; };
+  window.getSupplierReturns = function () { return []; };
+  window.getUsers = function () { return []; };
+  window.alert = function () {};
+
+  var host = document.getElementById('host');
+  window.openModal = function (opts) {
+    host.innerHTML = '<div class="modal-holder">' + opts.contentHTML + '</div>';
+    var holder = host.querySelector('.modal-holder');
+    var closeFn = function () {};
+    if (opts.onRender) opts.onRender(holder, closeFn);
+  };
+
+  function freshState() {
+    localStorage.clear();
+    window.firestoreCache = { customers: [], suppliers: [], products: [], orders: [], payments: [], users: [], supplierReturns: [], supplierTransactions: [], expenses: [] };
+    window.__toasts = [];
+  }
+
+  function q(id) { return host.querySelector('#' + id); }
+  function typeInto(id, value) {
+    var el = q(id);
+    el.value = value;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  function expectThrow(fn) {
+    try { fn(); return null; } catch (e) { return e.message || String(e); }
+  }
+
+  // =====================================================================
+  // GROUP A — SUPPLIER PHONE UNIQUENESS (primary + secondary, every entry)
+  // =====================================================================
+  freshState();
+  var supA = window.createSupplier({ name: 'مورد أ', phone: '01000000001', address: 'القاهرة' });
+  var supB = window.createSupplier({ name: 'مورد ب', phone: '01000000002', secondaryPhone: '01000000012', address: 'الجيزة' });
+
+  var m1 = expectThrow(function () { window.createSupplier({ name: 'مكرر', phone: '01000000001' }); });
+  rec('S1 create duplicate PRIMARY rejected with exact message + name',
+    !!m1 && m1.indexOf('رقم الهاتف هذا مسجل بالفعل لمورد آخر (مورد أ)') !== -1, m1 || 'no throw');
+
+  var m2 = expectThrow(function () { window.createSupplier({ name: 'مكرر', phone: '01000000012' }); });
+  rec('S2 create PRIMARY equal to another supplier SECONDARY rejected',
+    !!m2 && m2.indexOf('مورد ب') !== -1, m2 || 'no throw');
+
+  var m3 = expectThrow(function () { window.createSupplier({ name: 'مكرر', phone: '01000000022', secondaryPhone: '01000000001' }); });
+  rec('S3 create SECONDARY equal to another supplier PRIMARY rejected',
+    !!m3 && m3.indexOf('مورد أ') !== -1, m3 || 'no throw');
+
+  var m4 = expectThrow(function () { window.createSupplier({ name: 'مكرر', phone: '01000000022', secondaryPhone: '01000000012' }); });
+  rec('S4 create SECONDARY equal to another supplier SECONDARY rejected',
+    !!m4 && m4.indexOf('مورد ب') !== -1, m4 || 'no throw');
+
+  var m5 = expectThrow(function () { window.createSupplier({ name: 'مكرر', phone: '01000000003', secondaryPhone: '01000000003' }); });
+  rec('S5 secondary equals own primary rejected',
+    !!m5 && m5.indexOf('لا يمكن أن يطابق') !== -1, m5 || 'no throw');
+
+  var m6 = expectThrow(function () { window.updateSupplier(supB.id, { phone: '01000000001' }); });
+  rec('S6 update PRIMARY to another supplier number rejected',
+    !!m6 && m6.indexOf('مورد أ') !== -1, m6 || 'no throw');
+
+  var m7 = expectThrow(function () { window.updateSupplier(supB.id, { secondaryPhone: '01000000001' }); });
+  rec('S7 update SECONDARY to another supplier number rejected',
+    !!m7 && m7.indexOf('مورد أ') !== -1, m7 || 'no throw');
+
+  var okEdit = null;
+  try { window.updateSupplier(supB.id, { phone: '01000000002' }); okEdit = 'allowed'; } catch (e) { okEdit = 'threw ' + e.message; }
+  rec('S8 update keeping OWN primary/secondary is allowed (self-exclusion)', okEdit === 'allowed', okEdit);
+
+  rec('S9 no duplicate suppliers created by failed attempts (count=2)',
+    window.getSuppliers().length === 2, 'count=' + window.getSuppliers().length);
+
+  // =====================================================================
+  // GROUP B — CUSTOMER PHONE UNIQUENESS (create dedupe + edit guard)
+  // =====================================================================
+  freshState();
+  var custA = window.createCustomer({ name: 'عميل أ', phone: '01012345001', address: 'القاهرة' });
+  var custB = window.createCustomer({ name: 'عميل ب', phone: '01012345002', secondaryPhone: '01012345012', address: 'الجيزة' });
+
+  var dupC = window.createCustomer({ name: 'مكرر', phone: '01012345001' });
+  rec('C1 create duplicate PRIMARY returns existing customer (no duplicate)',
+    dupC.id === custA.id && window.getCustomers().length === 2, 'id=' + dupC.id + ' count=' + window.getCustomers().length);
+
+  var m10 = expectThrow(function () { window.createCustomer({ name: 'مكرر', phone: '01012345003', secondaryPhone: '01012345001' }); });
+  rec('C2 create SECONDARY equal to another customer PRIMARY rejected',
+    !!m10 && m10.indexOf('عميل أ') !== -1, m10 || 'no throw');
+
+  var m11 = expectThrow(function () { window.createCustomer({ name: 'مكرر', phone: '01012345004', secondaryPhone: '01012345012' }); });
+  rec('C3 create SECONDARY equal to another customer SECONDARY rejected',
+    !!m11 && m11.indexOf('عميل ب') !== -1, m11 || 'no throw');
+
+  var m12 = expectThrow(function () { window.updateCustomer(custB.id, { phone: '01012345001' }); });
+  rec('C4 update PRIMARY to another customer number rejected',
+    !!m12 && m12.indexOf('عميل أ') !== -1, m12 || 'no throw');
+
+  var m13 = expectThrow(function () { window.updateCustomer(custB.id, { secondaryPhone: '01012345001' }); });
+  rec('C5 update SECONDARY to another customer number rejected',
+    !!m13 && m13.indexOf('عميل أ') !== -1, m13 || 'no throw');
+
+  var okCust = null;
+  try { window.updateCustomer(custB.id, { secondaryPhone: '01012345022' }); okCust = 'allowed'; } catch (e) { okCust = 'threw ' + e.message; }
+  rec('C6 update keeping OWN secondary is allowed (self-exclusion)', okCust === 'allowed', okCust);
+
+  // =====================================================================
+  // GROUP C — ORDERS FORM LOCK (name + category locked for registered cust)
+  // =====================================================================
+  freshState();
+  var matchedCust = { id: 'CUST-L1', name: 'أحمد محمد علي', phone: '01153722266', secondaryPhone: '01166666666', category: 'عميل قطاعي / فردي', address: 'القاهرة - مصر الجديدة - شارع العروبة', createdAt: '2026-08-01T10:00:00Z' };
+  window.saveCollection('customers', [matchedCust]);
+  window.saveCollection('products', [{ id: 'PRD-1', name: 'بطانية صوف', stock: 50, purchasePrice: 100, sellingPrice: 150 }]);
+  window.saveCollection('suppliers', []);
+  host.innerHTML = '';
+  window.openNewOrderModal();
+
+  var nameInput = q('order-cust-name');
+  var categorySelect = q('order-cust-category');
+  var phoneInput = q('order-cust-phone');
+
+  typeInto('order-cust-phone', '01153722266');
+  rec('O1 registered customer locks name (readOnly) + category (disabled)',
+    nameInput.readOnly === true && categorySelect.disabled === true,
+    'name.readOnly=' + nameInput.readOnly + ' category.disabled=' + categorySelect.disabled);
+
+  rec('O2 name + category auto-filled from registered record',
+    nameInput.value === 'أحمد محمد علي' && categorySelect.value === 'عميل قطاعي / فردي',
+    'name=' + nameInput.value + ' cat=' + categorySelect.value);
+
+  typeInto('order-cust-phone', '');
+  rec('O3 clearing phone unlocks fields + clears name',
+    nameInput.readOnly === false && categorySelect.disabled === false && nameInput.value === '',
+    'name.readOnly=' + nameInput.readOnly + ' category.disabled=' + categorySelect.disabled + ' name=' + nameInput.value);
+
+  typeInto('order-cust-phone', '01153722266');
+  typeInto('order-cust-phone-2', '01000000000');
+  rec('O4 changing phone2 to unregistered number unlocks + clears fields',
+    nameInput.readOnly === false && categorySelect.disabled === false && nameInput.value === '' && q('order-cust-phone-2').value === '',
+    'name.readOnly=' + nameInput.readOnly + ' name=' + nameInput.value + ' phone2=' + q('order-cust-phone-2').value);
+
+  typeInto('order-cust-phone-2', '');
+  typeInto('order-cust-phone', '01153722266');
+  rec('O5 re-recognizing re-locks name + category',
+    nameInput.readOnly === true && categorySelect.disabled === true,
+    'name.readOnly=' + nameInput.readOnly + ' category.disabled=' + categorySelect.disabled);
+
+  // O6: submitting the locked invoice still sends the matched identity
+  var capturedOrder = null;
+  var origCreateOrder = window.createOrder;
+  window.createOrder = function (payload) { capturedOrder = payload; return { id: 'ORD-TEST' }; };
+  q('form-new-order').onsubmit({ preventDefault: function () {} });
+  window.createOrder = origCreateOrder;
+  rec('O6 submit uses locked matched identity (name/category/phone)',
+    !!capturedOrder && capturedOrder.customerInfo.name === 'أحمد محمد علي' &&
+    capturedOrder.customerInfo.category === 'عميل قطاعي / فردي' &&
+    capturedOrder.customerInfo.phone === '01153722266',
+    capturedOrder ? JSON.stringify(capturedOrder.customerInfo) : 'no order captured');
+
+  // O7: brand-new customer — typing an unregistered secondary phone must NOT
+  // clear the manually typed name/category (new-customer preservation)
+  host.innerHTML = '';
+  window.openNewOrderModal();
+  typeInto('order-cust-phone', '01012345999');
+  typeInto('order-cust-name', 'محمود سمير');
+  typeInto('order-cust-phone-2', '01012345998');
+  rec('O7 unregistered secondary phone preserves manually typed fields (new customer)',
+    q('order-cust-name').value === 'محمود سمير' && q('order-cust-name').readOnly === false &&
+    q('order-cust-phone-2').value === '01012345998',
+    'name=' + q('order-cust-name').value + ' phone2=' + q('order-cust-phone-2').value);
+
+  // =====================================================================
+  // GROUP D — QUICK-ADD SUPPLIER ROUTING (product modal + supplier modal)
+  // =====================================================================
+  freshState();
+  window.saveCollection('suppliers', []);
+  window.saveCollection('products', []);
+  var openAddCalls = 0;
+  var origOpenAdd = window.openAddSupplierModal;
+  window.openAddSupplierModal = function (edit, cb) { openAddCalls++; };
+
+  host.innerHTML = '';
+  window.openAddProductModal();
+  var quickBtn = q('btn-quick-add-supplier');
+  rec('D1 product modal renders quick-add supplier button', !!quickBtn, quickBtn ? 'found' : 'missing');
+  if (quickBtn) {
+    quickBtn.onclick();
+    rec('D2 quick-add button routes to central openAddSupplierModal (not inline add)',
+      openAddCalls === 1, 'calls=' + openAddCalls);
+  }
+  window.openAddSupplierModal = origOpenAdd;
+
+  // D3: supplier modal submit with a duplicate phone shows the SAME rejection
+  freshState();
+  window.createSupplier({ name: 'مورد حالي', phone: '01000000005', address: 'القاهرة' });
+  host.innerHTML = '';
+  window.openAddSupplierModal();
+  q('sup-name').value = 'مورد مكرر سريع';
+  q('sup-phone').value = '01000000005';
+  q('form-supplier').onsubmit({ preventDefault: function () {} });
+  var dupToast = window.__toasts.filter(function (t) { return t.indexOf('مسجل بالفعل لمورد آخر') !== -1; });
+  rec('D3 quick-add duplicate phone rejected with SAME central message',
+    dupToast.length >= 1 && window.getSuppliers().length === 1,
+    'toasts=' + JSON.stringify(window.__toasts) + ' count=' + window.getSuppliers().length);
+
+  // D4: quick-add with unique phone creates via central createSupplier
+  freshState();
+  host.innerHTML = '';
+  window.openAddSupplierModal();
+  q('sup-name').value = 'مورد سريع جديد';
+  q('sup-phone').value = '01000000006';
+  q('form-supplier').onsubmit({ preventDefault: function () {} });
+  var created = window.getSuppliers().find(function (s) { return s.name === 'مورد سريع جديد'; });
+  rec('D4 quick-add unique phone creates supplier through central service',
+    !!created && created.phone === '01000000006', created ? 'ok' : 'not created');
+
+  // =====================================================================
+  // GROUP E — SYNC & EXCEL COLUMNS: secondary phone + shipping address + address list
+  // =====================================================================
+  try {
+    freshState();
+    window.createSupplier({ name: 'مورد الشحن', phone: '01055550001', address: 'الجيزة' });
+    var eprod = window.createProduct({ name: 'منتج مزامنة', code: 'E-1', purchasePrice: 100, sellingPrice: 200, stock: 20, minStock: 1 });
+    var ecust = window.createCustomer({ name: 'عميل العناوين', phone: '01012345001', secondaryPhone: '01012345002', address: 'القاهرة - مصر الجديدة - شارع العروبة' });
+    window.addCustomerAddress(ecust.id, { label: 'المخزن', address: 'الجيزة - فيصل - شارع الملك فيصل' });
+    window.addCustomerAddress(ecust.id, { label: 'محل العمل', address: 'القاهرة - وسط البلد - شارع طلعت حرب' });
+    var eAddresses = window.getCustomerAddresses(ecust.id);
+    var eord = window.createOrder({
+      customerInfo: { name: ecust.name, phone: ecust.phone, secondaryPhone: ecust.secondaryPhone, category: ecust.category, addressId: eAddresses[1].id, address: eAddresses[1].address },
+      items: [{ productId: eprod.id, productName: eprod.name, quantity: 1, purchasePrice: 100, sellingPrice: 200 }],
+      downPayment: 0, status: 'delivered', directShipping: false
+    });
+    var eord2 = window.getOrderById(eord.id);
+    rec('E1 order doc persists secondary + shipping address id/label',
+      eord2.customerSecondaryPhone === '01012345002' && !!eord2.shippingAddressId &&
+      eord2.shippingAddress === 'الجيزة - فيصل - شارع الملك فيصل' && eord2.shippingAddressLabel === 'المخزن',
+      'sec=' + eord2.customerSecondaryPhone + ' addr=' + eord2.shippingAddress + ' lbl=' + eord2.shippingAddressLabel);
+
+    var memE = window.GoogleSheetsSync.createMemoryTransport();
+    await window.GoogleSheetsSync.exportAll(memE);
+    var oSheetE = memE.sheets['Orders_Sales'];
+    var cSheetE = memE.sheets['Customers_Balances'];
+    var oHeadersE = oSheetE.headers;
+    var cHeadersE = cSheetE.headers;
+    var oRowE = oSheetE.rows.find(function (r) { return String(r.id) === String(eord.id); });
+    var cRowE = cSheetE.rows.find(function (r) { return String(r.id) === String(ecust.id); });
+
+    rec('E2 Orders_Sales has dedicated secondary-phone + shipping-address + address-list columns',
+      oHeadersE.indexOf('هاتف ثانوي (العميل)') !== -1 && oHeadersE.indexOf('عنوان الشحن لهذا الطلب') !== -1 &&
+      oHeadersE.indexOf('اسم عنوان الشحن') !== -1 && oHeadersE.indexOf('معرّف عنوان الشحن') !== -1 &&
+      oHeadersE.indexOf('عناوين العميل (قائمة)') !== -1,
+      'headers=' + oHeadersE.join('|'));
+
+    rec('E3 Customers_Balances has addresses-list column',
+      cHeadersE.indexOf('قائمة العناوين') !== -1, 'headers=' + cHeadersE.join('|'));
+
+    rec('E4 exported order row carries secondary phone + chosen shipping address + addresses JSON',
+      !!oRowE && oRowE.customerSecondaryPhone === '01012345002' &&
+      oRowE.shippingAddress === 'الجيزة - فيصل - شارع الملك فيصل' && oRowE.shippingAddressLabel === 'المخزن' &&
+      typeof oRowE.customerAddresses === 'string' && oRowE.customerAddresses.indexOf('المخزن') !== -1 &&
+      oRowE.customerAddresses.indexOf('محل العمل') !== -1,
+      oRowE ? JSON.stringify(oRowE) : 'no row');
+
+    rec('E5 exported customer row carries the full address list',
+      !!cRowE && typeof cRowE.addresses === 'string' && cRowE.addresses.indexOf('المخزن') !== -1 &&
+      cRowE.addresses.indexOf('محل العمل') !== -1 && cRowE.addresses.indexOf('شارع العروبة') !== -1,
+      cRowE ? cRowE.addresses : 'no row');
+
+    // E6: full export ➔ reset ➔ import round-trip restores everything losslessly
+    freshState();
+    await window.GoogleSheetsSync.importAll(memE);
+    var custAfter = window.getCustomerById(ecust.id);
+    var ordAfter = window.getOrderById(eord.id);
+    rec('E6 import round-trip restores addresses list + secondary phone + shipping address',
+      !!custAfter && !!custAfter.addresses && custAfter.addresses.length === 3 &&
+      custAfter.secondaryPhone === '01012345002' &&
+      custAfter.addresses.some(function (a) { return a.label === 'المخزن'; }) &&
+      !!ordAfter && ordAfter.customerSecondaryPhone === '01012345002' &&
+      ordAfter.shippingAddress === 'الجيزة - فيصل - شارع الملك فيصل' && ordAfter.shippingAddressLabel === 'المخزن',
+      custAfter ? ('addrs=' + (custAfter.addresses ? custAfter.addresses.length : 0) + ' sec=' + custAfter.secondaryPhone) : 'no cust');
+
+    // E7/E8: Excel unified export exposes the same dedicated columns
+    freshState();
+    window.createSupplier({ name: 'مورد الشحن', phone: '01055550001', address: 'الجيزة' });
+    var eprod2 = window.createProduct({ name: 'منتج مزامنة', code: 'E-1', purchasePrice: 100, sellingPrice: 200, stock: 20, minStock: 1 });
+    var ecust2 = window.createCustomer({ name: 'عميل العناوين', phone: '01012345001', secondaryPhone: '01012345002', address: 'القاهرة - مصر الجديدة - شارع العروبة' });
+    window.addCustomerAddress(ecust2.id, { label: 'المخزن', address: 'الجيزة - فيصل - شارع الملك فيصل' });
+    var eA2 = window.getCustomerAddresses(ecust2.id);
+    var eord2a = window.createOrder({
+      customerInfo: { name: ecust2.name, phone: ecust2.phone, secondaryPhone: ecust2.secondaryPhone, category: ecust2.category, addressId: eA2[0].id, address: eA2[0].address },
+      items: [{ productId: eprod2.id, productName: eprod2.name, quantity: 1, purchasePrice: 100, sellingPrice: 200 }],
+      downPayment: 0, status: 'delivered', directShipping: false
+    });
+    var hadXLSX = window.XLSX, hadToast = window.showToast, capturedWb = null;
+    window.showToast = function () {};
+    window.XLSX = {
+      utils: {
+        book_new: function () { return { sheets: [] }; },
+        json_to_sheet: function (rows) { return { rows: rows }; },
+        book_append_sheet: function (wb, ws, name) { wb.sheets.push({ name: name, ws: ws }); }
+      },
+      writeFile: function (wb, filename) { capturedWb = wb; }
+    };
+    try { window.exportFullDatabaseToExcel(); } catch (e7) { capturedWb = null; window.__xlsxErr = (e7 && e7.message ? e7.message : String(e7)); }
+    var xOrders = capturedWb ? capturedWb.sheets.find(function (s) { return s.name === 'المبيعات والفواتير'; }) : null;
+    var xCust = capturedWb ? capturedWb.sheets.find(function (s) { return s.name === 'العملاء والأرصدة'; }) : null;
+    var xOrdRow = xOrders ? xOrders.ws.rows.find(function (r) { return r['رقم الفاتورة'] === eord2a.id; }) : null;
+    var xCustRow = xCust ? xCust.ws.rows.find(function (r) { return r['كود العميل'] === ecust2.id; }) : null;
+    rec('E7 Excel orders sheet has shipping-address + addresses-list columns',
+      !!xOrdRow && xOrdRow['عنوان الشحن لهذا الطلب'] === 'القاهرة - مصر الجديدة - شارع العروبة' &&
+      xOrdRow['اسم عنوان الشحن'] === 'العنوان الأساسي' && String(xOrdRow['عناوين العميل (قائمة)']).indexOf('المخزن') !== -1,
+      xOrdRow ? JSON.stringify(xOrdRow) : ('no row err=' + (window.__xlsxErr || 'none')));
+    rec('E8 Excel customers sheet has addresses-list column',
+      !!xCustRow && String(xCustRow['قائمة العناوين']).indexOf('المخزن') !== -1,
+      xCustRow ? xCustRow['قائمة العناوين'] : 'no row');
+    window.XLSX = hadXLSX;
+    window.showToast = hadToast;
+  } catch (eE) {
+    rec('E-group exception', false, eE && eE.stack ? eE.stack : String(eE));
+  }
+
+  out.textContent = (failures === 0 ? 'ALL_PASS' : 'HAS_FAILURES') + ' | total=' + (passCount + failures) + ' passed=' + passCount + ' failed=' + failures + '\n----\n' + lines.join('\n');
+  document.title = failures === 0 ? 'ALL_PASS' : 'HAS_FAILURES';
+})();
+</script>
+</body>
+</html>

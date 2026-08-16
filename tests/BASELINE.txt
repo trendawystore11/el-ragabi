@@ -1,0 +1,11 @@
+# BASELINE - reference parity target (Phase 0)
+# recorded: 2026-08-05T11:34:52.074Z
+# Any phase that does NOT match Total/Failed below is FAILED.
+features-test | PASS | Total=15 Failed=0
+e2e-runner | PASS | Total=22 Failed=0
+test-logic | PASS | Total=61 Failed=0
+audit-test | PASS | Total=34 Failed=0
+phone2-test | PASS | Total=9 Failed=0
+orders-filter | PASS | Total=10 Failed=0
+sandbox-test | PASS | Total=22 Failed=0
+GRAND | PASS | Total=173 Failed=0
