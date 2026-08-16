@@ -916,7 +916,10 @@ function _doStartSync() {
     // toast how many made it to the cloud.
     if (!window._autoPushReported) {
       window._autoPushReported = true;
-      window.forcePushPendingToCloud(localSnapshot, { silent: false });
+      // V3.62 — المزامنة التلقائية بعد الدخول صامتة: «لا توجد سجلات محلية
+      // معلقة» كانت تظهر بلا فائدة مع كل جلسة. تبقى الرسائل ظاهرة فقط للزر
+      // اليدوي في نافذة جوجل شيت (forcePushPendingToCloud بدون silent).
+      window.forcePushPendingToCloud(localSnapshot, { silent: true });
     }
   });
 }

@@ -35,8 +35,8 @@ export const useSettingsStore = create((set) => ({
   // حفظ تغييرات جزئية عبر الخدمة (تطبيق + كتابة + نسخة سحابية). تُحدَّث حالة
   // المخزن من القيم الناتجة (next) لا من إعادة القراءة فقط — فيبقى المخزن
   // متطابقاً مع ما حُفظ فعلاً حتى في وضع الاختبار (الذي لا يكتب للتخزين).
-  save(partial) {
-    const next = settingsService.saveSettings(partial)
+  save(partial, opts) {
+    const next = settingsService.saveSettings(partial, opts)
     set(next)
     return next
   },

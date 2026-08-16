@@ -106,6 +106,11 @@ function SettingsView({ onNavigate }) {
   // This preserves the original save behavior even when a test/browser event
   // dispatches a click immediately after an input event.
   const appNameRef = useRef(initial.appName)
+  // V3.62 — مؤقّت debounce لتغيير الثيم: الضغط المتكرر السريع يجمّع حفظاً
+  // واحداً فقط بدلاً من إغراق شاشة الإشعارات برسالة لكل نقرة.
+  const themeDebounceRef = useRef(null)
+
+  useEffect(() => () => clearTimeout(themeDebounceRef.current), [])
 
   // سحب نسخة الإعدادات من السحابة عند فتح الشاشة (تغييرات متصفح آخر).
   useEffect(() => {
@@ -144,7 +149,7 @@ function SettingsView({ onNavigate }) {
     )
   }
 
-  const saveGeneral = extra => {
+  const saveGeneral = (extra, opts = {}) => {
     const current = useSettingsStore.getState()
     const obj = Object.assign(
       {
@@ -155,13 +160,15 @@ function SettingsView({ onNavigate }) {
       },
       extra || {}
     )
-    const saved = useSettingsStore.getState().save(obj)
+    // V3.62 — الدفع للسحابة يتم مرة واحدة فقط من هنا؛ saveSettings الداخلي
+    // يتخطى رفعه عبر noCloudPush كي لا تتكرر رسالة «وتزامنت مع السحابة».
+    const saved = useSettingsStore.getState().save(obj, { noCloudPush: true })
     setAppName(saved.appName)
     appNameRef.current = saved.appName
     setLogo(saved.logo)
     setPrimaryColor(saved.primaryColor)
     setTheme(saved.theme)
-    showToast('✓ تم حفظ الإعدادات العامة محلياً', 'success')
+    if (!opts.silent) showToast('✓ تم حفظ الإعدادات العامة محلياً', 'success')
     if (window.generalSettings && typeof window.generalSettings.pushToCloud === 'function') {
       setSaving(true)
       window.generalSettings
@@ -186,8 +193,13 @@ function SettingsView({ onNavigate }) {
     const meta = THEME_META[value] || THEME_META.dark
     setPrimaryColor(meta.accent)
     useSettingsStore.getState().setPrimary(meta.accent)
-    saveGeneral({ theme: value, primaryColor: meta.accent })
     showToast(`✓ تم التبديل إلى ثيم ${meta.label}`, 'success')
+    // V3.62 — debounce: التبديل السريع بين الثيمات يُطبَّق فوراً لكن الحفظ
+    // (المحلي + السحابي) يحدث مرة واحدة فقط بعد هدوء النقرات.
+    clearTimeout(themeDebounceRef.current)
+    themeDebounceRef.current = setTimeout(() => {
+      saveGeneral({ theme: value, primaryColor: meta.accent }, { silent: true })
+    }, 300)
   }
 
   const reset = () => {
