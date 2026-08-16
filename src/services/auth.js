@@ -575,21 +575,29 @@ export async function login(email, password) {
             console.warn('seed user ensure note:', seedErr && seedErr.message);
           }
         }
-        try {
-          const staffSnap = await window.db.collection('staff').doc(fbUid).get();
-          if (staffSnap && !staffSnap.exists) {
-            // 🔧 V3.45.1 — SELF-HEALING: الحساب مسجّل فعلاً في Firebase Auth وله
-            // وثيقة في `users`، لكن سجل تفعيله staff/{uid} مفقود (مشروع جديد أو
-            // انقطاع أثناء إنشاء الحساب). نعيد إنشاءه تلقائياً — القواعد تسمح
-            // بكتابته كأول مدير (بوتستراف) عندما تكون المجموعة فارغة. إن لم
-            // يُكتب السجل ولم يكن الحساب مديراً، يبقى الرفض كما في السابق.
-            const healed = await healMissingStaffDoc(fbUid, cleanEmail, user);
-            const isPrivileged = !!(user && (user.role === 'admin' || user.id === 'USR-1001'));
-            if (!healed && !isPrivileged) {
-              throw new Error('حسابك غير مُفعَّل في نظام هذا المتجر — يرجى التواصل مع المدير');
+          try {
+            const staffSnap = await window.db.collection('staff').doc(fbUid).get();
+            if (staffSnap && !staffSnap.exists) {
+              // 🔧 V3.45.1 — SELF-HEALING: الحساب مسجّل فعلاً في Firebase Auth وله
+              // وثيقة في `users`، لكن سجل تفعيله staff/{uid} مفقود (مشروع جديد أو
+              // انقطاع أثناء إنشاء الحساب). نعيد إنشاءه تلقائياً — القواعد تسمح
+              // بكتابته كأول مدير (بوتستراف) عندما تكون المجموعة فارغة. إن لم
+              // يُكتب السجل ولم يكن الحساب مديراً، يبقى الرفض كما في السابق.
+              const healed = await healMissingStaffDoc(fbUid, cleanEmail, user);
+              const isPrivileged = !!(user && (user.role === 'admin' || user.id === 'USR-1001'));
+              if (!healed && !isPrivileged) {
+                throw new Error('حسابك غير مُفعَّل في نظام هذا المتجر — يرجى التواصل مع المدير');
+              }
+              // V3.63 — BMS SAFETY NET: الفشل الصامت في كتابة سجل الفريق كان يترك
+              // قاعدة سحابية فارغة بلا أي إشعار ويبدو الدخول ناجحاً. الآن يُنبه
+              // الحساب المتميز بوضوح مع الإجراء اليدوي المتاح (تفعيل بوتستراف
+              // يدوي بمفتاح خدمة) بدل الاستمرار في صمت.
+              if (!healed && isPrivileged && window.showToast) {
+                console.warn('[auth.login] staff/{uid} مفقود ولم ينجح الشفاء الذاتي — يحتاج بوتستراف يدوي.');
+                window.showToast('⚠️ لم يُسجَّل سجل فريق هذا الحساب في السحابة (بوتستراف ناقص). أعد تسجيل الدخول بعد اكتمال الاتصال؛ إن تكرر الأمر، نفّذ التفعيل اليدوي الموثق في CLIENT-SETUP-DETAILED.md', 'warning', 8000);
+              }
             }
-          }
-        } catch (staffErr) {
+          } catch (staffErr) {
           if (staffErr && staffErr.message && staffErr.message.indexOf('غير مُفعَّل') !== -1) throw staffErr;
           // فشل شبكة/صلاحيات في قراءة سجل الفريق: يترك للقواعد الطبيعية.
         }

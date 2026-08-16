@@ -114,20 +114,19 @@ describe('SettingsView (ui/views/SettingsView.jsx)', () => {
     expect(swatches).toHaveLength(8)
     const colorInput = host.querySelector('input[type="color"]')
     expect(colorInput.value).toBe('#0284c7')
-    expect(host.textContent).toContain('حفظ الإعدادات العامة')
+    expect(host.textContent).toContain('حفظ اسم النظام والشعار')
     expect(host.textContent).toContain('استعادة الافتراضي')
     unmount()
   })
 
-  it('تعديل اسم النظام ثم الحفظ يحدّث المخزن ويعرض إشعارَي الحفظ والمزامنة', async () => {
+  it('تعديل اسم النظام ثم الحفظ يحدّث المخزن ويعرض إشعار المزامنة', async () => {
     const { host, unmount } = mount()
     setInputValue(getInput('اسم النظام / التطبيق'), 'متجر علاء')
     const saveBtn = Array.from(host.querySelectorAll('button')).find(b =>
-      b.textContent.includes('حفظ الإعدادات العامة')
+      b.textContent.includes('حفظ اسم النظام والشعار')
     )
     click(saveBtn)
     expect(useSettingsStore.getState().appName).toBe('متجر علاء')
-    expect(lastToast().message).toContain('✓ تم حفظ الإعدادات العامة محلياً')
 
     await act(async () => {})
     expect(window.generalSettings.pushToCloud).toHaveBeenCalled()
@@ -135,12 +134,15 @@ describe('SettingsView (ui/views/SettingsView.jsx)', () => {
     unmount()
   })
 
-  it('تغيير الثيم يطبّق لونه المميز ويحفظ فوراً مع إشعار التبديل', () => {
+  it('تغيير الثيم يطبّق لونه المميز فوراً ويحفظ تفضيله الشخصي بعد الـ debounce', async () => {
     const { host, unmount } = mount()
     setSelectValue(getSelect('مظهر النظام'), 'ocean')
-    expect(useSettingsStore.getState().theme).toBe('ocean')
     expect(useSettingsStore.getState().primaryColor).toBe('#06b6d4')
     expect(lastToast().message).toContain('✓ تم التبديل إلى ثيم محيطي')
+    // تفضيل شخصي يُحفظ محلياً بلا رفع للسحابة بعد هدوء النقرات.
+    await act(async () => { await new Promise(r => setTimeout(r, 350)) })
+    expect(useSettingsStore.getState().theme).toBe('ocean')
+    expect(window.generalSettings.pushToCloud).not.toHaveBeenCalled()
     unmount()
   })
 
@@ -153,7 +155,7 @@ describe('SettingsView (ui/views/SettingsView.jsx)', () => {
     unmount()
   })
 
-  it('زر استعادة الافتراضي يعيد القيم الأصلية', () => {
+  it('زر استعادة الافتراضي يعيد القيم الأصلية (افتراضيات ملف العميل)', () => {
     window.confirm = vi.fn(() => true)
     const { host, unmount } = mount()
     useSettingsStore.setState({ appName: 'اسم معدل', primaryColor: '#dc2626', theme: 'coffee' })
@@ -163,9 +165,9 @@ describe('SettingsView (ui/views/SettingsView.jsx)', () => {
       b.textContent.includes('استعادة الافتراضي')
     )
     click(resetBtn)
-    expect(useSettingsStore.getState().appName).toBe('علاء الدين')
-    expect(useSettingsStore.getState().primaryColor).toBe('#0284c7')
-    expect(useSettingsStore.getState().theme).toBe('dark')
+    expect(useSettingsStore.getState().appName).toBe('Trendawy')
+    expect(useSettingsStore.getState().primaryColor).toBe('#8B7CFF')
+    expect(useSettingsStore.getState().theme).toBe('graphite')
     expect(lastToast().message).toContain('تم استعادة الإعدادات الافتراضية')
     unmount()
   })
@@ -174,7 +176,7 @@ describe('SettingsView (ui/views/SettingsView.jsx)', () => {
     window.generalSettings.pushToCloud = vi.fn(() => Promise.resolve(false))
     const { host, unmount } = mount()
     const saveBtn = Array.from(host.querySelectorAll('button')).find(b =>
-      b.textContent.includes('حفظ الإعدادات العامة')
+      b.textContent.includes('حفظ اسم النظام والشعار')
     )
     click(saveBtn)
     await act(async () => {})
@@ -183,12 +185,13 @@ describe('SettingsView (ui/views/SettingsView.jsx)', () => {
   })
 
   it('بعد الحفظ ثم إعادة فتح الصفحة تبقى القيم المحفوظة — لا ترجع لقيمتها القديمة', () => {
-    window.localStorage.removeItem('bms_aladdin_general_settings')
+    window.localStorage.removeItem('bms_trendawy_general_settings')
+    window.localStorage.removeItem('bms_trendawy_user_prefs')
     useSettingsStore.setState({ ...DEFAULT_SETTINGS })
     const first = mount()
     setInputValue(getInput('اسم النظام / التطبيق'), 'متجر علاء')
     const saveBtn = Array.from(first.host.querySelectorAll('button')).find(b =>
-      b.textContent.includes('حفظ الإعدادات العامة')
+      b.textContent.includes('حفظ اسم النظام والشعار')
     )
     click(saveBtn)
     first.unmount()
@@ -200,7 +203,7 @@ describe('SettingsView (ui/views/SettingsView.jsx)', () => {
   })
 
   it('في وضع الاختبار يُطبَّق الحفظ بصرياً على الجلسة دون الكتابة للتخزين — لا يرتد فورياً', () => {
-    window.localStorage.removeItem('bms_aladdin_general_settings')
+    window.localStorage.removeItem('bms_trendawy_general_settings')
     useSettingsStore.setState({ ...DEFAULT_SETTINGS })
     const prevSandbox = window.isSandboxMode
     window.isSandboxMode = true
@@ -208,15 +211,29 @@ describe('SettingsView (ui/views/SettingsView.jsx)', () => {
       const { unmount } = mount()
       setInputValue(getInput('اسم النظام / التطبيق'), 'تجربة الاختبار')
       const saveBtn = Array.from(document.querySelectorAll('button')).find(b =>
-        b.textContent.includes('حفظ الإعدادات العامة')
+        b.textContent.includes('حفظ اسم النظام والشعار')
       )
       click(saveBtn)
       expect(useSettingsStore.getState().appName).toBe('تجربة الاختبار')
       expect(getInput('اسم النظام / التطبيق').value).toBe('تجربة الاختبار')
-      expect(window.localStorage.getItem('bms_aladdin_general_settings')).toBeNull()
+      expect(window.localStorage.getItem('bms_trendawy_general_settings')).toBeNull()
       unmount()
     } finally {
       window.isSandboxMode = prevSandbox
     }
+  })
+
+  it('موظف (غير مدير): حقول الهوية مقفلة، لا زر حفظ، واللون/الثيم شخصيان بلا رفع للسحابة', () => {
+    useAuthStore.setState({ user: { id: 'USR-2002', email: 'emp@store.com', role: 'employee' }, authed: true, role: 'employee' })
+    const { host, unmount } = mount()
+    expect(getInput('اسم النظام / التطبيق').disabled).toBe(true)
+    expect(Array.from(host.querySelectorAll('button')).some(b => b.textContent.includes('حفظ اسم النظام والشعار'))).toBe(false)
+
+    const swatch = Array.from(host.querySelectorAll('[data-color]')).find(b => b.getAttribute('data-color') === '#7c3aed')
+    click(swatch)
+    expect(useSettingsStore.getState().primaryColor).toBe('#7c3aed')
+    // 🔒 التفضيلات الشخصية لا تُرفع للسحابة
+    expect(window.generalSettings.pushToCloud).not.toHaveBeenCalled()
+    unmount()
   })
 })

@@ -5,16 +5,29 @@ import {
   hydrateCloudThemeReadOnly,
 } from '@/services/settings'
 
-// V3.55 — SAFE THEME SYNC «قراءة فقط» عند الإقلاع.
-// 1) hydrateCloudThemeReadOnly تُطبّق ثيم السحابة (الأحدث) على data-theme دون
-//    أي كتابة إلى localStorage ودون أي رفع تلقائي — فلا تُستعاد بيانات ممسوحة.
-// 2) hydrateFromCloud لم تعد ترفع المحلي إلى السحابة عندما يكون أحدث: الرفع
-//    يحدث فقط عند تغيير الثيم يدوياً (saveSettings → pushToCloud).
+// V3.63 — SPLIT SCOPE:
+//   - الهوية (اسم/تاجلاين/شعار) في `general_settings` (عالمية) وتُزامن للسحابة (LWW).
+//   - الثيم/اللون/الاختصار تفضيلات شخصية لكل مستخدم في `user_prefs` — بلا سحابة.
+// 1) hydrateCloudThemeReadOnly تُطبّق تفضيلات المستخدم الجالس محلياً — لا تقرأ
+//    السحابة إطلاقاً (المظهر لم يعد يُزامن بين الأجهزة).
+// 2) hydrateFromCloud تتبنّى الهوية الأحدث فقط (اسم/تاجلاين/شعار) ولا تمس المظهر.
 
 const SETTINGS_KEY = 'bms_trendawy_general_settings'
+const PREFS_KEY = 'bms_trendawy_user_prefs'
+const SESSION_KEY = 'bms_trendawy_user_session'
 
-function seedLocal({ theme = 'dark', primaryColor = '#001C3D', updatedAt = 100 } = {}) {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify({ theme, primaryColor, updatedAt }))
+function seedSession(user) {
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(user))
+}
+
+function seedLocal(identity) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(identity))
+}
+
+function seedPrefs(userId, prefs) {
+  const map = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')
+  map[userId] = prefs
+  localStorage.setItem(PREFS_KEY, JSON.stringify(map))
 }
 
 function cloudDoc(data) {
@@ -46,85 +59,84 @@ function localTheme() {
 }
 
 beforeEach(() => {
-  seedLocal()
+  localStorage.clear()
+  sessionStorage.clear()
+  seedLocal({ appName: 'Trendawy', tagline: 'لراحة بالك ناوي', logo: '2.png', updatedAt: 100 })
+  seedSession({ id: 'USR-1001', email: 'admin@store.com', role: 'admin', name: 'المدير العام' })
   applySettings()
 })
 
 afterEach(() => {
   delete window._authUser
   delete window.db
-  localStorage.removeItem(SETTINGS_KEY)
+  localStorage.clear()
+  sessionStorage.clear()
   document.documentElement.setAttribute('data-theme', 'dark')
 })
 
-describe('services/settings — hydrateCloudThemeReadOnly (قراءة فقط)', () => {
-  it('نسخة سحابية أحدث → تُطبَّق على data-theme وتُعاد القيم، بلا كتابة محلية وبلا رفع', async () => {
-    const db = installCloud({ theme: 'emerald', primaryColor: '#10b981', updatedAt: 200 })
-    const before = localStorage.getItem(SETTINGS_KEY)
+describe('services/settings — hydrateCloudThemeReadOnly يطبّق تفضيلات المستخدم المحلية (V3.63)', () => {
+  it('يعيد تفضيلات المستخدم الجالس ويطبّقها على data-theme دون أي قراءة سحابية', async () => {
+    seedPrefs('USR-1001', { theme: 'emerald', primaryColor: '#10b981' })
 
     const adopted = await hydrateCloudThemeReadOnly()
 
     expect(adopted).toBeTruthy()
     expect(adopted.theme).toBe('emerald')
     expect(localTheme()).toBe('emerald')
-    // 🔒 لا تُكتب أي نسخة محلية من القراءة-فقط
-    expect(localStorage.getItem(SETTINGS_KEY)).toBe(before)
-    // 🔒 لا يُرفع شيء إلى السحابة من هذه الدالة
-    expect(db.collection('settings').doc('appSettings').set).not.toHaveBeenCalled()
+    // 🔒 لا يلمس السحابة إطلاقاً — لا window.db ولا أي رفع
+    expect(window.db).toBeUndefined()
   })
 
-  it('نسخة سحابية أقدم أو مساوية → لا تُطبَّق ولا تُكتب ولا يُرفع', async () => {
-    const db = installCloud({ theme: 'royal', primaryColor: '#8b5cf6', updatedAt: 50 })
+  it('بدون جلسة → يعيد false وتبقى الافتراضيات المطبّقة عند الإقلاع', async () => {
+    sessionStorage.clear()
+
+    const adopted = await hydrateCloudThemeReadOnly()
+
+    expect(adopted).toBe(false)
+    // لا يوجد مستخدم جالس → لا تُطبَّق أي تفضيلات شخصية، يبقى مظهر الافتراضي
+    expect(localTheme()).toBe('graphite')
+  })
+})
+
+describe('services/settings — hydrateFromCloud تتبنّى الهوية فقط (V3.63)', () => {
+  it('السحابة أحدث → تتبنّى اسم/شعار فقط وتُرجع true، دون المساس بالمظهر الشخصي', async () => {
+    seedPrefs('USR-1001', { theme: 'royal', primaryColor: '#8b5cf6' })
+    seedLocal({ appName: 'Trendawy', updatedAt: 100 })
+    installCloud({ appName: 'اسم جديد', logo: 'new.png', theme: 'emerald', primaryColor: '#10b981', updatedAt: 400 })
+
+    const adopted = await hydrateFromCloud()
+
+    expect(adopted).toBe(true)
+    const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY))
+    expect(stored.appName).toBe('اسم جديد')
+    expect(stored.logo).toBe('new.png')
+    expect(stored.updatedAt).toBe(400)
+    // 🔒 المظهر الشخصي لم يُمسّ من السحابة
+    expect(localTheme()).toBe('royal')
+    const prefs = JSON.parse(localStorage.getItem(PREFS_KEY))
+    expect(prefs['USR-1001'].theme).toBe('royal')
+  })
+
+  it('المحلي أحدث أو مساوٍ → لا يُرفع ولا يُكتب، وتُرجع false', async () => {
+    seedLocal({ appName: 'Trendawy', updatedAt: 300 })
+    const db = installCloud({ appName: 'قديم', updatedAt: 100 })
     const before = localStorage.getItem(SETTINGS_KEY)
 
-    const adopted = await hydrateCloudThemeReadOnly()
+    const adopted = await hydrateFromCloud()
 
     expect(adopted).toBe(false)
-    expect(localTheme()).toBe('dark')
     expect(localStorage.getItem(SETTINGS_KEY)).toBe(before)
+    // 🔒 الرفع لم يعد يحدث تلقائياً — فقط عند تغيير الهوية يدوياً (saveSettings)
     expect(db.collection('settings').doc('appSettings').set).not.toHaveBeenCalled()
-  })
-
-  it('بدون جلسة سحابية → لا شيء (لا شبكة سحابية = لا تطبيق)', async () => {
-    delete window._authUser
-    const adopted = await hydrateCloudThemeReadOnly()
-    expect(adopted).toBe(false)
-    expect(localTheme()).toBe('dark')
   })
 
   it('مستند سحابي مفقود → لا شيء ولا كتابة محلية', async () => {
     installCloud(null)
     const before = localStorage.getItem(SETTINGS_KEY)
-    const adopted = await hydrateCloudThemeReadOnly()
+
+    const adopted = await hydrateFromCloud()
+
     expect(adopted).toBe(false)
     expect(localStorage.getItem(SETTINGS_KEY)).toBe(before)
-  })
-})
-
-describe('services/settings — hydrateFromCloud لا ترفع المحلي الأحدث (V3.55)', () => {
-  it('المحلي أحدث من السحابة → لا يُرفع ولا يُكتب، وتُرجع false', async () => {
-    seedLocal({ theme: 'coffee', updatedAt: 300 })
-    applySettings()
-    const db = installCloud({ theme: 'emerald', updatedAt: 100 })
-
-    const adopted = await hydrateFromCloud()
-
-    expect(adopted).toBe(false)
-    expect(localTheme()).toBe('coffee')
-    // 🔒 الرفع لم يعد يحدث تلقائياً — فقط عند تغيير الثيم يدوياً
-    expect(db.collection('settings').doc('appSettings').set).not.toHaveBeenCalled()
-  })
-
-  it('السحابة أحدث → تُتبنّى في شاشة الإعدادات (كتابة محلية مسموحة هناك) وتُرجع true', async () => {
-    seedLocal({ theme: 'dark', updatedAt: 100 })
-    installCloud({ theme: 'ocean', primaryColor: '#06b6d4', updatedAt: 400 })
-
-    const adopted = await hydrateFromCloud()
-
-    expect(adopted).toBe(true)
-    expect(localTheme()).toBe('ocean')
-    const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY))
-    expect(stored.theme).toBe('ocean')
-    expect(stored.updatedAt).toBe(400)
   })
 })

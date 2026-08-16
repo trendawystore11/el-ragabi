@@ -23,13 +23,13 @@ export const useSettingsStore = create((set) => ({
     return snapshot()
   },
 
-  // V3.55 — مزامنة آمنة للثيم «قراءة فقط» من السحابة عند الدخول: تُطبَّق نسخة
-  // السحابة (إن كانت أحدث) على document.documentElement دون كتابة محلية ودون
-  // رفع تلقائي، وتُحدَّث حالة الواجهة لتطابق ما ظهر فعلاً.
+  // V3.63 — عند الدخول/الإقلاع: تُطبَّق تفضيلات العرض الشخصية للمستخدم الجالس
+  // (ثيم/لون/اختصار أرقام — مخزنة محلياً لكل مستخدم، بلا قراءة سحابية) وتُحدَّث
+  // حالة الواجهة لتطابق ما ظهر فعلاً.
   async hydrateCloudTheme() {
-    const adopted = await settingsService.hydrateCloudThemeReadOnly()
-    if (adopted && typeof adopted === 'object') set(adopted)
-    return !!adopted
+    const applied = await settingsService.hydrateCloudThemeReadOnly()
+    if (applied && typeof applied === 'object') set(applied)
+    return !!applied
   },
 
   // حفظ تغييرات جزئية عبر الخدمة (تطبيق + كتابة + نسخة سحابية). تُحدَّث حالة

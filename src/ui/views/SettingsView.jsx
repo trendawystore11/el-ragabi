@@ -8,12 +8,12 @@
 // الربط والسحابة 🔐 تبقى من قائمة الحساب (نافذة legacy openSyncCloudModal).
 // =============================================================================
 import { useState, useEffect, useRef } from 'react'
-import { Settings as SettingsIcon, Palette, Lock, Minimize2 } from 'lucide-react'
+import { Settings as SettingsIcon, Palette, Lock, Minimize2, ShieldCheck } from 'lucide-react'
 import Button from '../components/Button.jsx'
 import Input from '../components/Input.jsx'
-import Select from '../components/Select.jsx'
 import { useSettingsStore } from '@/state/settingsStore'
 import { useAuthStore } from '@/state/authStore'
+import { CLIENT } from '@/client/config.js'
 import { showToast } from '../components/toastStore.js'
 
 
@@ -51,11 +51,11 @@ const THEME_OPTIONS = [
 const PRESET_COLORS = ['#0284c7', '#0ea5e9', '#7c3aed', '#16a34a', '#dc2626', '#f59e0b', '#db2777', '#0f172a']
 
 const DEFAULT_SETTINGS = {
-  appName: 'علاء الدين',
-  tagline: 'للبطاطين والمفروشات',
-  logo: '2.png',
-  primaryColor: '#0284c7',
-  theme: 'dark',
+  appName: CLIENT.appName,
+  tagline: CLIENT.tagline,
+  logo: CLIENT.logo,
+  primaryColor: CLIENT.primaryColor,
+  theme: CLIENT.theme,
   compactNumbers: false,
 }
 
@@ -94,6 +94,10 @@ function readLogoFile(file) {
 
 function SettingsView({ onNavigate }) {
   const authed = useAuthStore(s => s.authed)
+  const role = useAuthStore(s => s.role)
+  // V3.63 — هوية النظام (اسم/شعار) للمدير فقط؛ الثيم واللون ووضع الاختصار
+  // تفضيلات شخصية لكل مستخدم على جهازه.
+  const isAdmin = role === 'admin'
 
   const initial = useSettingsStore.getState()
   const [appName, setAppName] = useState(initial.appName)
@@ -112,7 +116,8 @@ function SettingsView({ onNavigate }) {
 
   useEffect(() => () => clearTimeout(themeDebounceRef.current), [])
 
-  // سحب نسخة الإعدادات من السحابة عند فتح الشاشة (تغييرات متصفح آخر).
+  // سحب نسخة الهوية من السحابة عند فتح الشاشة (تغييرات أجراها المدير على
+  // جهاز آخر). لا تُمس التفضيلات الشخصية (ثيم/لون) من هنا أبداً.
   useEffect(() => {
     let mounted = true
     const hydrate = () => {
@@ -125,8 +130,6 @@ function SettingsView({ onNavigate }) {
             setAppName(d.appName)
             appNameRef.current = d.appName
             setLogo(d.logo)
-            setPrimaryColor(d.primaryColor)
-            setTheme(d.theme)
           })
           .catch(() => {})
       }
@@ -149,26 +152,31 @@ function SettingsView({ onNavigate }) {
     )
   }
 
-  const saveGeneral = (extra, opts = {}) => {
+  // V3.63 — حفظ التفضيلات الشخصية (ثيم/لون/اختصار) محلياً للمستخدم الجالس فقط:
+  // تطبيق فوري + كتابة للجهاز، بلا أي رفع للسحابة (لا تؤثر على زملائك).
+  const savePersonal = (extra = {}, opts = {}) => {
     const current = useSettingsStore.getState()
     const obj = Object.assign(
-      {
-        appName: appNameRef.current.trim() || current.appName,
-        logo: logo.trim() || current.logo,
-        primaryColor,
-        theme,
-      },
+      { primaryColor, theme, compactNumbers: current.compactNumbers },
       extra || {}
     )
-    // V3.62 — الدفع للسحابة يتم مرة واحدة فقط من هنا؛ saveSettings الداخلي
-    // يتخطى رفعه عبر noCloudPush كي لا تتكرر رسالة «وتزامنت مع السحابة».
+    const saved = useSettingsStore.getState().save(obj, { noCloudPush: true })
+    setPrimaryColor(saved.primaryColor)
+    setTheme(saved.theme)
+    if (!opts.silent) showToast('✓ تم حفظ تفضيلاتك على هذا الجهاز', 'success')
+  }
+
+  // حفظ هوية النظام (اسم/شعار) — للمدير فقط، ويظهر للجميع عبر السحابة.
+  const saveIdentity = () => {
+    const current = useSettingsStore.getState()
+    const obj = {
+      appName: appNameRef.current.trim() || current.appName,
+      logo: logo.trim() || current.logo,
+    }
     const saved = useSettingsStore.getState().save(obj, { noCloudPush: true })
     setAppName(saved.appName)
     appNameRef.current = saved.appName
     setLogo(saved.logo)
-    setPrimaryColor(saved.primaryColor)
-    setTheme(saved.theme)
-    if (!opts.silent) showToast('✓ تم حفظ الإعدادات العامة محلياً', 'success')
     if (window.generalSettings && typeof window.generalSettings.pushToCloud === 'function') {
       setSaving(true)
       window.generalSettings
@@ -186,7 +194,9 @@ function SettingsView({ onNavigate }) {
   const pickColor = (c, opts = {}) => {
     setPrimaryColor(c)
     useSettingsStore.getState().setPrimary(c)
-    if (!opts.silent) showToast('✓ تم تغيير اللون الأساسي', 'info', 1500)
+    // اللون تفضيل شخصي — يُحفظ فوراً على الجهاز بلا سحابة.
+    useSettingsStore.getState().save({ primaryColor: c }, { noCloudPush: true })
+    if (!opts.silent) showToast('✓ تم تغيير اللون الأساسي على جهازك', 'info', 1500)
   }
 
   const changeTheme = value => {
@@ -195,26 +205,28 @@ function SettingsView({ onNavigate }) {
     useSettingsStore.getState().setPrimary(meta.accent)
     showToast(`✓ تم التبديل إلى ثيم ${meta.label}`, 'success')
     // V3.62 — debounce: التبديل السريع بين الثيمات يُطبَّق فوراً لكن الحفظ
-    // (المحلي + السحابي) يحدث مرة واحدة فقط بعد هدوء النقرات.
+    // (المحلي الشخصي فقط) يحدث مرة واحدة بعد هدوء النقرات.
     clearTimeout(themeDebounceRef.current)
     themeDebounceRef.current = setTimeout(() => {
-      saveGeneral({ theme: value, primaryColor: meta.accent }, { silent: true })
+      savePersonal({ theme: value, primaryColor: meta.accent }, { silent: true })
     }, 300)
   }
 
   const reset = () => {
     if (!window.confirm('هل أنت متأكد من استعادة الإعدادات الافتراضية؟ سيتم التراجع عن جميع التعديلات الحالية.')) return
-    useSettingsStore.getState().save(DEFAULT_SETTINGS)
-    setAppName(DEFAULT_SETTINGS.appName)
-    setLogo(DEFAULT_SETTINGS.logo)
-    setPrimaryColor(DEFAULT_SETTINGS.primaryColor)
-    setTheme(DEFAULT_SETTINGS.theme)
+    const saved = useSettingsStore.getState().save(DEFAULT_SETTINGS)
+    setAppName(saved.appName)
+    appNameRef.current = saved.appName
+    setLogo(saved.logo)
+    setPrimaryColor(saved.primaryColor)
+    setTheme(saved.theme)
     showToast('تم استعادة الإعدادات الافتراضية', 'success')
   }
 
   const toggleCompactNumbers = () => {
     const next = !useSettingsStore.getState().compactNumbers
-    useSettingsStore.getState().save({ compactNumbers: next })
+    // وضع الاختصار تفضيل شخصي — يُحفظ محلياً بلا سحابة.
+    useSettingsStore.getState().save({ compactNumbers: next }, { noCloudPush: true })
     showToast(next ? '✓ وضع الاختصار مفعّل — الأرقام تظهر مثل 1.4K وتُكتمل عند الوقوف بالماوس' : '✓ وضع الاختصار متوقف — الأرقام كاملة دائماً', 'success')
   }
 
@@ -243,13 +255,20 @@ function SettingsView({ onNavigate }) {
           <div className="settings-section-icon"><Palette className="w-5 h-5" /></div>
           <div>
             <h3>الهوية والمظهر</h3>
-            <p>التغييرات تحفظ محلياً وتُزامن مع السحابة تلقائياً عند توفر الاتصال.</p>
+            <p>
+              {isAdmin
+                ? 'اسم النظام والشعار يظهران لكل الموظفين ويتزامنان مع السحابة — أما المظهر واللون فتفضيلات شخصية على جهازك.'
+                : 'الهوية (الاسم والشعار) يتحكم فيها المدير وتظهر كما هي على كل الأجهزة — أما المظهر واللون فتفضيلاتك الشخصية على هذا الجهاز.'}
+            </p>
           </div>
         </div>
 
         <div className="settings-grid">
           <div className="settings-field settings-field-wide">
-            <Input label="اسم النظام / التطبيق" value={appName} onChange={value => { appNameRef.current = value; setAppName(value) }} placeholder="علاء الدين" />
+            <Input label="اسم النظام / التطبيق" value={appName} onChange={value => { appNameRef.current = value; setAppName(value) }} placeholder="علاء الدين" disabled={!isAdmin} />
+            {!isAdmin && (
+              <p className="mt-1 text-[11px] text-slate-500 flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 text-slate-400" /> التعديل متاح للمدير فقط</p>
+            )}
           </div>
 
           <div className="settings-field settings-field-wide">
@@ -265,13 +284,19 @@ function SettingsView({ onNavigate }) {
                   onChange={e => setLogo(e.target.value)}
                   placeholder="رابط صورة (URL) أو اختر ملفاً…"
                   className="settings-text-input"
+                  disabled={!isAdmin}
                 />
-                <label className="settings-upload-btn">
-                  رفع صورة
-                  <input type="file" accept="image/*" className="hidden" onChange={onLogoFile} />
-                </label>
+                {isAdmin && (
+                  <label className="settings-upload-btn">
+                    رفع صورة
+                    <input type="file" accept="image/*" className="hidden" onChange={onLogoFile} />
+                  </label>
+                )}
               </div>
             </div>
+            {!isAdmin && (
+              <p className="mt-1 text-[11px] text-slate-500 flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 text-slate-400" /> الشعار يتحكم فيه المدير ويظهر لكل الموظفين</p>
+            )}
           </div>
 
           <div className="settings-field settings-field-wide">
@@ -279,6 +304,7 @@ function SettingsView({ onNavigate }) {
               <label className="settings-label">اللون الأساسي</label>
               <span className="settings-color-value">{primaryColor}</span>
             </div>
+            <p className="settings-personal-hint">شخصي على جهازك — لا يتغير عند زملائك.</p>
             <div className="settings-color-row">
               {PRESET_COLORS.map(c => (
                 <button
@@ -308,6 +334,7 @@ function SettingsView({ onNavigate }) {
               <label className="settings-label">مظهر النظام</label>
               <span className="settings-color-value">{THEME_META[theme]?.label || 'داكن'}</span>
             </div>
+            <p className="settings-personal-hint">شخصي على جهازك — لا يؤثر على مظهر زملائك.</p>
             <label className="sr-only">
               مظهر النظام
               <select
@@ -352,6 +379,7 @@ function SettingsView({ onNavigate }) {
               <label className="settings-label inline-flex items-center gap-1.5"><Minimize2 className="w-4 h-4 text-slate-400" /> وضع الاختصار للأرقام (K/M)</label>
               <span className="settings-color-value">{compactNumbers ? 'مضغوط' : 'رقم كامل'}</span>
             </div>
+            <p className="settings-personal-hint">شخصي على جهازك — لا يؤثر على طريقة عرض زملائك.</p>
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
@@ -378,12 +406,20 @@ function SettingsView({ onNavigate }) {
         </div>
 
         <div className="settings-actions">
-          <Button variant="primary" onClick={() => saveGeneral()} loading={saving} disabled={saving}>
-            {saving ? 'جارٍ المزامنة مع السحابة...' : 'حفظ الإعدادات العامة'}
-          </Button>
-          <Button variant="secondary" onClick={reset}>
-            استعادة الافتراضي
-          </Button>
+          {isAdmin ? (
+            <>
+              <Button variant="primary" onClick={saveIdentity} loading={saving} disabled={saving}>
+                {saving ? 'جارٍ المزامنة مع السحابة...' : 'حفظ اسم النظام والشعار'}
+              </Button>
+              <Button variant="secondary" onClick={reset}>
+                استعادة الافتراضي
+              </Button>
+            </>
+          ) : (
+            <p className="settings-actions-note text-xs text-slate-400">
+              تُحفظ تغييراتك الشخصية (المظهر واللون والاختصار) تلقائياً على هذا الجهاز.
+            </p>
+          )}
         </div>
       </div>
     </div>
