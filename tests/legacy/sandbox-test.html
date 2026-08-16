@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>SANDBOX-TEST</title>
+</head>
+<body>
+<pre id="o">running...</pre>
+<!-- Phase 2: the compat bridge installs the ported ES modules onto window —
+     replaces the legacy js/ scripts below. ES-module ordering guarantees the
+     runner below executes after the bridge has fully wired every global. -->
+<script type="module" src="../../src/legacy/compat.js"></script>
+<script type="module">
+window.onerror = function (msg, src, line, col, err) {
+  try { document.getElementById('o').textContent = 'TOPLEVEL_ERROR: ' + msg + ' @' + line + ':' + col + (err && err.stack ? '\n' + err.stack : ''); } catch (e) {}
+  return true;
+};
+window.showToast = window.showToast || function () {};
+(function () {
+  'use strict';
+  var RESULTS = [];
+  var FAILED = 0;
+  var TESTS = [];
+
+  function test(name, fn) { TESTS.push({ name: name, fn: fn }); }
+  function assert(c, m) { if (!c) throw new Error(m || 'assertion failed'); }
+  function assertEq(a, b, m) { if (String(a) !== String(b)) throw new Error((m || '') + ' => expected [' + b + '] got [' + a + ']'); }
+  function deepCopy(v) { return JSON.parse(JSON.stringify(v == null ? [] : v)); }
+  function readLocal(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+
+  function resetAll() {
+    Object.keys(window.STORAGE_KEYS).forEach(function (k) {
+      window.firestoreCache[window.STORAGE_KEYS[k]] = [];
+    });
+    try { localStorage.removeItem('bms_pending_ops'); } catch (e) {}
+    try { localStorage.removeItem('bms_tombstones'); } catch (e) {}
+    Object.keys(window.STORAGE_KEYS).forEach(function (k) {
+      var v = window.STORAGE_KEYS[k];
+      if (v && typeof v === 'string') { try { localStorage.removeItem('bms_data_' + v); } catch (e) {} }
+    });
+    try { localStorage.removeItem('bms_general_settings'); } catch (e) {}
+    try { localStorage.removeItem('bms_google_sheets_config'); } catch (e) {}
+    window._sandboxOriginal = null;
+    window.isSandboxMode = false;
+    window.firestoreCache = {};
+    window.initDB();
+  }
+
+  function seedData() {
+    var custKey = window.STORAGE_KEYS.CUSTOMERS;
+    var ordKey = window.STORAGE_KEYS.ORDERS;
+    var custs = [
+      { id: 'c1', name: 'عميل 1', phone: '01000000001', balance: 0 },
+      { id: 'c2', name: 'عميل 2', phone: '01000000002', balance: 0 }
+    ];
+    var ords = [
+      { id: 'o1', customerName: 'عميل 1', total: 100, remainingBalance: 0, status: 'completed' }
+    ];
+    window.firestoreCache[custKey] = deepCopy(custs);
+    window.firestoreCache[ordKey] = deepCopy(ords);
+    try { localStorage.setItem('bms_data_' + custKey, JSON.stringify(custs)); } catch (e) {}
+    try { localStorage.setItem('bms_data_' + ordKey, JSON.stringify(ords)); } catch (e) {}
+  }
+
+  resetAll();
+  seedData();
+
+  var custKey = window.STORAGE_KEYS.CUSTOMERS;
+  var ordKey = window.STORAGE_KEYS.ORDERS;
+  var origCache = deepCopy(window.firestoreCache);
+  var origLocalCust = readLocal('bms_data_' + custKey);
+  var origLocalOrd = readLocal('bms_data_' + ordKey);
+  var origQueueLen = window.pendingOpsQueue().length;
+  var origTombLen = window.getTombstones().length;
+
+  // ---------------- Enter / state ----------------
+  test('S1 enterSandboxMode returns true', function () {
+    assertEq(window.enterSandboxMode(), true, 'enter result');
+  });
+  test('S2 isSandboxActive is true while active', function () {
+    assertEq(window.isSandboxActive(), true, 'active flag');
+    assertEq(window.isSandboxMode, true, 'mode flag');
+  });
+
+  // ---------------- Write isolation ----------------
+  test('S3 addFirestoreDoc mutates RAM only, never localStorage', function () {
+    window.addFirestoreDoc(custKey, { id: 'c3', name: 'عميل تجربة', phone: '01000000003' });
+    assert(window.firestoreCache[custKey].some(function (d) { return d.id === 'c3'; }), 'c3 in RAM cache');
+    assertEq(readLocal('bms_data_' + custKey), origLocalCust, 'localStorage mirror untouched');
+  });
+  test('S4 getCollection returns RAM sandbox view', function () {
+    var list = window.getCollection(custKey);
+    assert(list.some(function (d) { return d.id === 'c3'; }), 'sandbox view includes c3');
+    assert(list.length === origCache[custKey].length + 1, 'sandbox view length grew');
+  });
+  test('S5 queueFirestoreOp is a no-op while active', function () {
+    window.queueFirestoreOp({ kind: 'set', collection: custKey, docId: 'c3', data: {} });
+    assertEq(window.pendingOpsQueue().length, origQueueLen, 'queue length unchanged');
+    assertEq(readLocal('bms_pending_ops'), null, 'queue not persisted');
+  });
+  test('S6 updateFirestoreDoc mutates RAM only', function () {
+    window.updateFirestoreDoc(custKey, 'c3', { name: 'عميل تجربة معدل' });
+    assert(window.firestoreCache[custKey].some(function (d) { return d.id === 'c3' && d.name === 'عميل تجربة معدل'; }), 'c3 updated in RAM');
+    assertEq(readLocal('bms_data_' + custKey), origLocalCust, 'localStorage mirror untouched');
+  });
+  test('S7 deleteFirestoreDoc removes from RAM, no tombstone, no mirror write', async function () {
+    var ok = await window.deleteFirestoreDoc(custKey, 'c3');
+    assertEq(ok, true, 'delete returns true');
+    assert(!window.firestoreCache[custKey].some(function (d) { return d.id === 'c3'; }), 'c3 gone from RAM');
+    assertEq(window.getTombstones().length, origTombLen, 'tombstones unchanged');
+    assertEq(readLocal('bms_data_' + custKey), origLocalCust, 'localStorage mirror untouched');
+  });
+  test('S8 saveCollection never writes the mirror', function () {
+    var fake = [{ id: 'x1', name: 'مسحوق', balance: 0 }];
+    window.saveCollection(custKey, deepCopy(fake));
+    assert(window.firestoreCache[custKey].length === 1 && window.firestoreCache[custKey][0].id === 'x1', 'RAM replaced by sandbox data');
+    assertEq(readLocal('bms_data_' + custKey), origLocalCust, 'localStorage mirror untouched');
+    window.firestoreCache[custKey] = deepCopy(origCache[custKey]);
+  });
+  test('S9 normalizeAccountingData writes nothing to storage', function () {
+    window.firestoreCache[ordKey][0].remainingBalance = 50;
+    window.firestoreCache[ordKey][0].status = 'cancelled';
+    window.normalizeAccountingData();
+    assertEq(window.firestoreCache[ordKey][0].remainingBalance, 0, 'normalized in RAM');
+    assertEq(readLocal('bms_data_' + ordKey), origLocalOrd, 'localStorage mirror untouched');
+    window.firestoreCache[ordKey] = deepCopy(origCache[ordKey]);
+  });
+
+  // ---------------- Hard-blocked operations ----------------
+  test('S10 forcePushPendingToCloud returns 0 while active', async function () {
+    var n = await window.forcePushPendingToCloud(null, { silent: true });
+    assertEq(n, 0, 'blocked push count');
+  });
+  test('S11 forceWipeDatabase is blocked while active', async function () {
+    var ok = await window.forceWipeDatabase('admin');
+    assertEq(ok, false, 'wipe blocked');
+    assert(Object.keys(window.firestoreCache).length > 0, 'cache still populated');
+  });
+  test('S12 GoogleSheetsSync.syncNow returns sandboxBlocked', async function () {
+    var r = await window.GoogleSheetsSync.syncNow({ direction: 'export' });
+    assertEq(r.sandboxBlocked, true, 'blocked flag');
+    assertEq(r.exported, null, 'no export ran');
+  });
+  test('S13 GoogleSheetsSync.scheduleSync / flushSync are safe no-ops', function () {
+    window.GoogleSheetsSync.scheduleSync();
+    window.GoogleSheetsSync.flushSync && window.GoogleSheetsSync.flushSync();
+    assertEq(true, true, 'no throw');
+  });
+  test('S14 GeneralSettings.save does not persist while active', function () {
+    var before = readLocal('bms_general_settings');
+    window.GeneralSettings.save({ theme: 'light', primaryColor: '#ff0000' });
+    assertEq(readLocal('bms_general_settings'), before, 'settings localStorage untouched');
+  });
+  test('S15 sync config is not persisted while active', function () {
+    window.GoogleSheetsSync.saveConfig({ spreadsheetId: 'FAKE-SHEET-ID', direction: 'both' });
+    assertEq(readLocal('bms_google_sheets_config'), null, 'sync config not persisted');
+  });
+
+  // ---------------- Exit restores everything ----------------
+  test('S16 exitSandboxMode returns true', function () {
+    assertEq(window.exitSandboxMode(), true, 'exit result');
+  });
+  test('S17 sandbox is off after exit', function () {
+    assertEq(window.isSandboxActive(), false, 'active flag off');
+    assertEq(window._sandboxOriginal, null, 'original snapshot cleared');
+  });
+  test('S18 cache restored to the exact original dataset', function () {
+    assertEq(JSON.stringify(window.firestoreCache[custKey]), JSON.stringify(origCache[custKey]), 'customers restored');
+    assertEq(JSON.stringify(window.firestoreCache[ordKey]), JSON.stringify(origCache[ordKey]), 'orders restored');
+  });
+  test('S19 localStorage mirrors untouched end-to-end (no wipe)', function () {
+    assertEq(readLocal('bms_data_' + custKey), origLocalCust, 'customers mirror intact');
+    assertEq(readLocal('bms_data_' + ordKey), origLocalOrd, 'orders mirror intact');
+  });
+  test('S20 queue still empty after the whole cycle', function () {
+    assertEq(window.pendingOpsQueue().length, origQueueLen, 'queue unchanged');
+  });
+
+  // ---------------- Re-entry snapshots fresh ----------------
+  test('S21 second entry snapshots fresh and exit restores again', function () {
+    window.enterSandboxMode();
+    window.addFirestoreDoc(custKey, { id: 'zz', name: 'مؤقت', phone: '0' });
+    assert(window.firestoreCache[custKey].some(function (d) { return d.id === 'zz'; }), 'zz in RAM during 2nd session');
+    window.exitSandboxMode();
+    assertEq(JSON.stringify(window.firestoreCache[custKey]), JSON.stringify(origCache[custKey]), 'customers restored again');
+  });
+  test('S22 getCollection never falls back to real mirror while active', function () {
+    try { localStorage.setItem('bms_data_' + custKey, JSON.stringify([{ id: 'evil', name: 'منعكس' }])); } catch (e) {}
+    window.enterSandboxMode();
+    var list = window.getCollection(custKey);
+    assert(list.length === origCache[custKey].length, 'RAM view ignores the real mirror');
+    assert(!list.some(function (d) { return d.id === 'evil'; }), 'no leaked mirror doc');
+    window.exitSandboxMode();
+    assertEq(JSON.stringify(window.firestoreCache[custKey]), JSON.stringify(origCache[custKey]), 'cache restored after mirror-tamper test');
+  });
+
+  // ============================================================
+  (async function runAll() {
+    for (var i = 0; i < TESTS.length; i++) {
+      var t = TESTS[i];
+      try { await t.fn(); RESULTS.push('PASS: ' + t.name); }
+      catch (e) { FAILED++; RESULTS.push('FAIL: ' + t.name + ' :: ' + (e && e.message ? e.message : e)); }
+    }
+    var total = RESULTS.length;
+    document.getElementById('o').textContent =
+      'Sandbox isolation suite\nTotal: ' + total + ' | Failed: ' + FAILED + '\n' + RESULTS.join('\n');
+  })().catch(function (e) {
+    document.getElementById('o').textContent = 'RUNALL_ERROR: ' + (e && e.message ? e.message : e);
+  });
+})();
+</script>
+</body>
+</html>

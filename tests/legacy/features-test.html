@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>FEATURES-TEST</title>
+</head>
+<body>
+<pre id="o">running...</pre>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/utils/formatters.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/utils/toast.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/utils/modal.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/utils/excel.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/utils/statements.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/db.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/auth.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/customers.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/suppliers.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/products.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/orders.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/payments.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/expenses.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/supplier-returns.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/google-sheets-sync.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/services/general-settings.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/components/dashboard.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/components/orders-view.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/components/customers-view.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/components/suppliers-view.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/components/products-view.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/components/payments-view.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/components/reports-view.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/components/users-view.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/components/settings-view.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/components/orders-dialog.js"></script>
+<script src="file:///C:/Users/m/opencode/system%20for%20blankts/js/app.js"></script>
+<script>
+(function () {
+  'use strict';
+  var RESULTS = [];
+  var FAILED = 0;
+
+  function test(name, fn) {
+    try { fn(); RESULTS.push('PASS: ' + name); }
+    catch (e) { FAILED++; RESULTS.push('FAIL: ' + name + ' :: ' + (e && e.message ? e.message : e)); }
+  }
+  function assert(c, m) { if (!c) throw new Error(m || 'assertion failed'); }
+  function assertEq(a, b, m) { if (String(a) !== String(b)) throw new Error((m || '') + ' => expected [' + b + '] got [' + a + ']'); }
+
+  function resetAll() {
+    Object.keys(window.STORAGE_KEYS).forEach(function (k) {
+      window.firestoreCache[window.STORAGE_KEYS[k]] = [];
+    });
+    try { localStorage.removeItem('bms_pending_ops'); } catch (e) {}
+    try { localStorage.removeItem('bms_tombstones'); } catch (e) {}
+    Object.keys(window.STORAGE_KEYS).forEach(function (k) {
+      var v = window.STORAGE_KEYS[k];
+      if (v && typeof v === 'string') { try { localStorage.removeItem('bms_data_' + v); } catch (e) {} }
+    });
+    window.initDB();
+  }
+
+  resetAll();
+
+  // ================= F1: Dynamic City/District =================
+  test('F1.1 قوائم المحافظات الموسّعة تتضمن مدن/مراكز جديدة', function () {
+    assert(window.EGYPT_GOVERNORATES['القاهرة'].length >= 20, 'cairo list grew');
+    assert(window.EGYPT_GOVERNORATES['القاهرة'].indexOf('الموسكي') !== -1, 'cairo has الموسكي');
+    assert(window.EGYPT_GOVERNORATES['القاهرة'].indexOf('الخليفة') !== -1, 'cairo has الخليفة');
+    assert(window.EGYPT_GOVERNORATES['الجيزة'].indexOf('الواحات البحرية') !== -1, 'giza has الواحات البحرية');
+    assert(window.EGYPT_GOVERNORATES['الإسكندرية'].indexOf('أبو قير') !== -1, 'alex has أبو قير');
+    assert(window.EGYPT_GOVERNORATES['المنيا'].indexOf('مطاي') !== -1, 'minia has مطاي');
+    assert(window.EGYPT_GOVERNORATES['الوادي الجديد'].indexOf('باريس') !== -1, 'new valley has باريس');
+  });
+
+  test('F1.2 إضافة مدينة يدوية تُحفظ وتظهر في قائمة المدينة', function () {
+    try { localStorage.removeItem(window.CITY_CUSTOM_STORAGE_KEY); } catch (e) {}
+    var added = window.addCustomCity('القاهرة', 'حي العباسية الجديدة');
+    assert(added === true, 'first add returns true');
+    var dup = window.addCustomCity('القاهرة', 'حي العباسية الجديدة');
+    assert(dup === false, 'duplicate returns false');
+    var dupBuiltin = window.addCustomCity('القاهرة', 'مدينة نصر');
+    assert(dupBuiltin === false, 'built-in city not re-added');
+    var cities = window.getCitiesForGovernorate('القاهرة');
+    assert(cities.indexOf('حي العباسية الجديدة') !== -1, 'custom city in list');
+    var opts = window.citySelectOptions('القاهرة', '');
+    assert(opts.indexOf('حي العباسية الجديدة') !== -1, 'custom city in select options');
+    assert(opts.indexOf('__other__') !== -1, 'manual-entry option present');
+  });
+
+  test('F1.3 getEffectiveCity يقرأ الإدخال اليدوي والاختيار العادي', function () {
+    var sel = { value: 'القاهرة' }, man = { value: '' };
+    assertEq(window.getEffectiveCity(sel, man), 'القاهرة', 'normal select wins');
+    sel.value = '__other__'; man.value = 'حي الزيتون الجديدة';
+    assertEq(window.getEffectiveCity(sel, man), 'حي الزيتون الجديدة', 'manual value used');
+    man.value = '';
+    assertEq(window.getEffectiveCity(sel, man), '', 'empty manual -> empty');
+    sel.value = 'المعادي';
+    assertEq(window.getEffectiveCity(sel, man), 'المعادي', 'back to normal');
+  });
+
+  // ================= F2: Recurring monthly expenses =================
+  test('F2.1 createExpense يدعم الحقول الدورية (recurring + dueDay)', function () {
+    resetAll();
+    var e1 = window.createExpense({ title: 'إيجار شهري', amount: 3000, category: 'إيجارات', recurring: true, dueDay: 5 });
+    assert(e1.recurring === true, 'recurring true');
+    assertEq(e1.dueDay, 5, 'dueDay 5');
+    var e2 = window.createExpense({ title: 'كهرباء', amount: 400 });
+    assert(e2.recurring === false, 'one-time recurring false');
+    assert(e2.dueDay === null || e2.dueDay === undefined, 'one-time no dueDay');
+  });
+
+  test('F2.2 getCurrentOperatingExpenses يحسب المصروف الدوري حسب يوم الاستحقاق', function () {
+    resetAll();
+    window.createExpense({ title: 'إيجار', amount: 3000, recurring: true, dueDay: 5 });
+    window.createExpense({ title: 'كهرباء', amount: 500, recurring: true, dueDay: 20 });
+    window.createExpense({ title: 'تغليف', amount: 200 });
+    var before = window.getCurrentOperatingExpenses(new Date(2026, 7, 4)); // 4 August
+    assertEq(before.total, 200, 'before due day: only one-time counts (200)');
+    assertEq(before.recurringThisMonth, 0, 'nothing due yet');
+    assertEq(before.recurringFuture, 3500, 'future recurring 3000+500');
+    var dueDay = window.getCurrentOperatingExpenses(new Date(2026, 7, 5)); // 5 August
+    assertEq(dueDay.total, 3200, 'on due day: 3000+200 one-time');
+    assertEq(dueDay.recurringThisMonth, 3000, 'rent due now');
+    var later = window.getCurrentOperatingExpenses(new Date(2026, 7, 21)); // 21 August
+    assertEq(later.total, 3700, 'both recurring due: 3000+500+200');
+    assertEq(later.recurringFuture, 0, 'none future');
+  });
+
+  test('F2.3 updateExpense يعدّل المبلغ ويحوّل دوري/لحظي', function () {
+    resetAll();
+    var e = window.createExpense({ title: 'إنترنت', amount: 600 });
+    assertEq(e.recurring, false, 'created one-time');
+    var upd = window.updateExpense(e.id, { amount: 900, recurring: true, dueDay: 15 });
+    assertEq(upd.amount, 900, 'amount updated');
+    assertEq(upd.recurring, true, 'recurring toggled on');
+    assertEq(upd.dueDay, 15, 'dueDay set');
+    var upd2 = window.updateExpense(e.id, { recurring: false });
+    assert(upd2.dueDay === null || upd2.dueDay === undefined, 'dueDay cleared when toggled off');
+  });
+
+  test('F2.4 calculateNetProfit يخصم المصروف الدوري المستحق آلياً من الصافي', function () {
+    resetAll();
+    var p = window.createProduct({ name: 'منتج دوري', code: 'F2P', purchasePrice: 100, sellingPrice: 200, stock: 10, minStock: 0 });
+    window.createCustomer({ name: 'عميل دوري', phone: '01010000000' });
+    window.createOrder({
+      customerInfo: { name: 'عميل دوري', phone: '01010000000' },
+      items: [{ productId: p.id, productName: 'منتج دوري', quantity: 1, purchasePrice: 100, sellingPrice: 200, supplierId: '', supplierName: '' }],
+      downPayment: 0, status: 'delivered'
+    });
+    var calcBase = window.calculateNetProfit(window.getOrders());
+    assertEq(calcBase.netProfit, 100, 'net profit before recurring = 200-100');
+    var today = new Date();
+    var todayDay = today.getDate();
+    window.createExpense({ title: 'إيجار', amount: 1000, recurring: true, dueDay: todayDay });
+    var calcAfter = window.calculateNetProfit(window.getOrders());
+    assertEq(calcAfter.totalOpExpenses, 1000, 'recurring due this month deducted');
+    assertEq(calcAfter.netProfit, 100 - 1000, 'net profit minus recurring due');
+    window.createExpense({ title: 'صيانة', amount: 30 });
+    var calcMore = window.calculateNetProfit(window.getOrders());
+    assertEq(calcMore.totalOpExpenses, 1030, 'one-time always counted');
+    assertEq(calcMore.netProfit, 100 - 1030, 'net profit reflects one-time');
+  });
+
+  test('F2.5 getExpenseNextDueDate يحسب موعد الاستحقاق القادم', function () {
+    var e = { recurring: true, dueDay: 20 };
+    assertEq(window.getExpenseNextDueDate(e, new Date(2026, 7, 5)), '2026-08-20', 'same month future');
+    assertEq(window.getExpenseNextDueDate(e, new Date(2026, 7, 20)), '2026-09-20', 'on due day -> next month');
+    assertEq(window.getExpenseNextDueDate(e, new Date(2026, 7, 25)), '2026-09-20', 'past due -> next month');
+    assertEq(window.getExpenseNextDueDate({ recurring: true, dueDay: 31 }, new Date(2026, 11, 31)), '2027-01-31', 'on due day -> next month (year rollover)');
+    assertEq(window.getExpenseNextDueDate({ recurring: true, dueDay: 31 }, new Date(2027, 0, 31)), '2027-02-28', 'clamp 31 to Feb last day');
+    assertEq(window.getExpenseNextDueDate({ recurring: false, dueDay: 5 }, new Date(2026, 7, 1)), '', 'one-time no next due');
+  });
+
+  // ================= F3: Shipment logistics → COGS =================
+  test('F3.1 مصاريف الشحن/النسريات تُوزع على تكلفة القطعة دون زيادة مديونية المورد', function () {
+    resetAll();
+    var sup = window.createSupplier({ name: 'مصنع اللوجستيات', phone: '01020000000' });
+    var p = window.createProduct({ name: 'منتج لوجستيات', code: 'F3P', purchasePrice: 1000, sellingPrice: 1500, stock: 100, minStock: 0, supplierId: sup.id, supplierName: 'مصنع اللوجستيات' });
+    var beforeShip = window.getSupplierById(sup.id).remainingBalance; // 100 * 1000
+    window.addStockShipment(p.id, 50, sup.id, 1000, 'شحنة مع مصاريف', { shippingCost: 100, suppliesCost: 50 });
+    var after = window.getProductById(p.id);
+    assertEq(after.stock, 150, 'stock 150');
+    assertEq(after.purchasePrice, 1001, 'weighted avg cost = (100*1000+50*1000+150)/150 = 1001');
+    assertEq(after.shipmentExtrasTotal, 150, 'extras total recorded');
+    assert(after.lastShipmentExtras && after.lastShipmentExtras.shippingCost === 100 && after.lastShipmentExtras.suppliesCost === 50, 'last extras breakdown');
+    var supAfter = window.getSupplierById(sup.id);
+    assertEq(supAfter.remainingBalance - beforeShip, 50000, 'supplier debt delta = goods only (50*1000), extras excluded');
+    assertEq(supAfter.totalPurchases, 150000, 'total purchases = 100000 initial + 50000 goods');
+    assertEq(supAfter.remainingBalance, 150000, 'supplier balance excludes extras');
+  });
+
+  test('F3.2 بدون مصاريف تبقى تكلفة القطعة دون تغيير', function () {
+    resetAll();
+    var sup = window.createSupplier({ name: 'مورد عادي', phone: '01030000000' });
+    var p = window.createProduct({ name: 'منتج عادي', code: 'F3Q', purchasePrice: 1000, sellingPrice: 1500, stock: 100, minStock: 0, supplierId: sup.id, supplierName: 'مورد عادي' });
+    window.addStockShipment(p.id, 50, sup.id, 1000, 'شحنة بدون مصاريف');
+    var after = window.getProductById(p.id);
+    assertEq(after.purchasePrice, 1000, 'avg unchanged at 1000');
+    assertEq(window.getSupplierById(sup.id).remainingBalance, 150000, 'supplier balance 150000');
+  });
+
+  test('F3.3 شحنة بلا مورد لا تُسجل أي مديونية مع توزيع المصاريف', function () {
+    resetAll();
+    var p = window.createProduct({ name: 'منتج داخلي', code: 'F3R', purchasePrice: 500, sellingPrice: 900, stock: 10, minStock: 0 });
+    window.addStockShipment(p.id, 10, '', 500, '', { shippingCost: 100, suppliesCost: 0 });
+    var after = window.getProductById(p.id);
+    assertEq(after.stock, 20, 'stock 20');
+    assertEq(after.purchasePrice, 505, 'avg = (10*500+10*500+100)/20 = 505');
+  });
+
+  // ================= F4: Cashier / quick-sale mode =================
+  test('F4.1 بيع فوري بدون هاتف يُنشئ طلباً مكتملاً نقداً باسم "عميل معرض"', function () {
+    resetAll();
+    var p = window.createProduct({ name: 'منتج كاشير', code: 'F4P', purchasePrice: 100, sellingPrice: 250, stock: 10, minStock: 0 });
+    var o = window.createOrder({
+      customerInfo: { name: '', phone: '', address: 'القاهرة - مدينة نصر' },
+      items: [{ productId: p.id, productName: 'منتج كاشير', quantity: 2, purchasePrice: 100, sellingPrice: 250, supplierId: '', supplierName: '' }],
+      downPayment: 0, status: 'new', cashierMode: true
+    });
+    assertEq(o.status, 'completed', 'status forced completed');
+    assertEq(o.customerName, 'عميل معرض', 'default walk-in name');
+    assertEq(o.totalAmount, 500, 'total 2*250');
+    assertEq(o.downPayment, 500, 'full cash paid');
+    assertEq(o.remainingBalance, 0, 'no remaining');
+    assert(o.paidInFull === true, 'paidInFull true');
+    assertEq(window.getProductById(p.id).stock, 8, 'stock decremented');
+  });
+
+  test('F4.2 عميل المعرض المشترك يُعاد استخدامه في كل بيع فوري', function () {
+    resetAll();
+    var p = window.createProduct({ name: 'منتج كاشير 2', code: 'F4Q', purchasePrice: 100, sellingPrice: 200, stock: 10, minStock: 0 });
+    var o1 = window.createOrder({
+      customerInfo: { name: '', phone: '', address: 'الجيزة - الدقي' },
+      items: [{ productId: p.id, productName: 'منتج كاشير 2', quantity: 1, purchasePrice: 100, sellingPrice: 200, supplierId: '', supplierName: '' }],
+      status: 'new', cashierMode: true
+    });
+    var o2 = window.createOrder({
+      customerInfo: { name: '', phone: '', address: 'الجيزة - الدقي' },
+      items: [{ productId: p.id, productName: 'منتج كاشير 2', quantity: 1, purchasePrice: 100, sellingPrice: 200, supplierId: '', supplierName: '' }],
+      status: 'new', cashierMode: true
+    });
+    assertEq(o1.customerId, o2.customerId, 'shared walk-in customer reused');
+    var walkIns = window.getCustomers().filter(function (c) { return c.name === 'عميل معرض'; });
+    assertEq(walkIns.length, 1, 'only one walk-in customer created');
+  });
+
+  test('F4.3 بيع فوري بهاتف صالح يرتبط بالعميل المسجل', function () {
+    resetAll();
+    var c = window.createCustomer({ name: 'عميل مسجل كاشير', phone: '01050000000' });
+    var p = window.createProduct({ name: 'منتج كاشير 3', code: 'F4R', purchasePrice: 100, sellingPrice: 200, stock: 10, minStock: 0 });
+    var o = window.createOrder({
+      customerInfo: { name: '', phone: '01050000000' },
+      items: [{ productId: p.id, productName: 'منتج كاشير 3', quantity: 1, purchasePrice: 100, sellingPrice: 200, supplierId: '', supplierName: '' }],
+      status: 'new', cashierMode: true
+    });
+    assertEq(o.customerId, c.id, 'matched registered customer');
+    assertEq(o.customerName, 'عميل مسجل كاشير', 'registered name kept');
+    assertEq(o.status, 'completed', 'still completed');
+  });
+
+  test('F4.4 الطلب العادي ما زال يرفض الهاتف الفارغ (حماية محفوظة)', function () {
+    resetAll();
+    var thrown = false;
+    try {
+      window.createOrder({
+        customerInfo: { name: 'بدون هاتف', phone: '' },
+        items: [],
+        status: 'delivered'
+      });
+    } catch (err) { thrown = true; }
+    assert(thrown, 'non-cashier empty phone rejected');
+  });
+
+  // ================= Summary =================
+  var summary = 'Total: ' + RESULTS.length + ' | Failed: ' + FAILED + '\n' + RESULTS.join('\n');
+  document.title = (FAILED === 0 ? 'ALL_PASS' : 'HAS_FAILURES') + ' - FEATURES';
+  try {
+    var out = document.getElementById('o');
+    out.textContent = summary;
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>
