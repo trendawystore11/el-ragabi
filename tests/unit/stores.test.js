@@ -161,13 +161,16 @@ describe('settingsStore (Phase 3 wiring to services/settings)', () => {
     expect(s.logo).toBe('2.png')
   })
 
-  it('save() persists to localStorage and applies visually', () => {
+  it('save() يفصل الهوية (general_settings) عن التفضيلات الشخصية (user_prefs) ويطبّق بصرياً', () => {
+    sessionStorage.setItem('bms_trendawy_user_session', JSON.stringify({ id: 'USR-1001', email: 'admin@store.com', role: 'admin', name: 'المدير العام' }))
     const next = useSettingsStore.getState().save({ theme: 'light', appName: 'نظام جديد' })
     expect(next.theme).toBe('light')
     expect(useSettingsStore.getState().appName).toBe('نظام جديد')
     const stored = JSON.parse(localStorage.getItem('bms_trendawy_general_settings'))
-    expect(stored.theme).toBe('light')
     expect(stored.appName).toBe('نظام جديد')
+    expect(stored.theme).toBeUndefined()
+    const prefs = JSON.parse(localStorage.getItem('bms_trendawy_user_prefs'))
+    expect(prefs['USR-1001'].theme).toBe('light')
     expect(document.documentElement.getAttribute('data-theme')).toBe('light')
     expect(document.documentElement.classList.contains('dark')).toBe(false)
   })
@@ -190,11 +193,13 @@ describe('settingsStore (Phase 3 wiring to services/settings)', () => {
     expect(document.documentElement.style.getPropertyValue('--brand-500')).toBe('#ff0000')
   })
 
-  it('hydrate() re-applies stored settings', () => {
-    useSettingsStore.getState().save({ theme: 'royal' })
+  it('hydrate() يعيد تطبيق الهوية والتفضيلات الشخصية المخزنة', () => {
+    sessionStorage.setItem('bms_trendawy_user_session', JSON.stringify({ id: 'USR-1001', email: 'admin@store.com', role: 'admin', name: 'المدير العام' }))
+    useSettingsStore.getState().save({ theme: 'royal', appName: 'نظام محفوظ' })
     useSettingsStore.setState(settingsService.getSettings())
     useSettingsStore.getState().hydrate()
     expect(useSettingsStore.getState().theme).toBe('royal')
+    expect(useSettingsStore.getState().appName).toBe('نظام محفوظ')
     expect(document.documentElement.getAttribute('data-theme')).toBe('royal')
   })
 })

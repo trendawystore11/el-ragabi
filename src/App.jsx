@@ -34,7 +34,8 @@ function App() {
   useEffect(() => {
     if (user) {
       useSettingsStore.getState().hydrate()
-      // V3.55 — ثيم المتصفح الآخر يعود فور الدخول (قراءة فقط، بلا رفع تلقائي).
+      // V3.63 — تفضيلات العرض الشخصية للمستخدم (ثيم/لون/اختصار) تعود فور دخوله
+      // على هذا المتصفح — تُقرأ محلياً بلا سحابة.
       useSettingsStore.getState().hydrateCloudTheme()
     }
   }, [user])
