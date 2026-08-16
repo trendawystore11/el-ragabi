@@ -143,7 +143,7 @@ export function applySettings() {
   applyTo(getSettings());
 }
 
-export function saveSettings(partial) {
+export function saveSettings(partial, opts) {
   const prev = getSettings();
   const next = Object.assign({}, prev, partial || {});
   if (THEMES.indexOf(next.theme) === -1) next.theme = 'dark';
@@ -160,7 +160,10 @@ export function saveSettings(partial) {
   }
   writeLocal(next);
   applySettings();
-  pushToCloud();
+  // V3.62 — الرفع للسحابة يحدث مرة واحدة فقط من المتصل (SettingsView) كي لا
+  // تتكرر رسالة «وتزامنت مع السحابة» لكل حفظ. noCloudPush تُستخدم عندما يتبنّى
+  // المتصل دفعته الخاصة بعد الحفظ.
+  if (!(opts && opts.noCloudPush)) pushToCloud();
   return next;
 }
 
