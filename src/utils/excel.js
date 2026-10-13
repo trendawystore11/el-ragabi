@@ -116,6 +116,8 @@ export async function exportFullDatabaseToExcel() {
       let typeLabel;
       if (p.entityType === 'supplier' && p.type === 'supplierCollection') {
         typeLabel = 'تحصيل نقدية من مورد (قبض)';
+      } else if (p.type === 'customerDebtAdjustment') {
+        typeLabel = amt < 0 ? 'تسوية مديونية عميل (زيادة رصيد)' : 'تسوية مديونية عميل (خصم رصيد)';
       } else if (isRefund) {
         typeLabel = 'استرداد / رد عربون (صادر)';
       } else {

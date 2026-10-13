@@ -283,7 +283,10 @@ export function reversePaymentRecord(paymentId, repo) {
   if (payment.entityType === 'customer') {
     const customer = repo.getCustomerById(payment.entityId);
     if (customer) {
-      const balanceDelta = (numericAmount < 0 || payment.isDownPayment) ? 0 : -numericAmount;
+      // V3.65 — تسوية المديونية تُحتسب مباشرة في «المسدد» بإشارتها، فعكسها يعيد
+      // المسدد والمتبقي معاً بإشارتها الكاملة (بخلاف الاسترداد الذي لا يمس الرصيد).
+      const isAdjustment = payment.type === 'customerDebtAdjustment';
+      const balanceDelta = isAdjustment ? -numericAmount : ((numericAmount < 0 || payment.isDownPayment) ? 0 : -numericAmount);
       repo.updateCustomer(payment.entityId, {
         paid: increment(-numericAmount),
         remainingBalance: increment(-balanceDelta)
@@ -363,6 +366,9 @@ export async function updatePaymentRecord(paymentId, changes, repo) {
   if (!old) throw new Error('قيد الدفعة غير موجود');
   if (old.refOrderId) {
     throw new Error('لا يمكن تعديل دفعة مرتبطة بفاتورة — عدّل الفاتورة أو حالتها بدلاً من ذلك');
+  }
+  if (old.type === 'customerDebtAdjustment') {
+    throw new Error('قيود تسوية المديونية تُدار من نافذة «تعديل المديونية» — استخدمها لتعديل الرصيد');
   }
 
   const isSupplierCollection = old.entityType === 'supplier' && old.type === 'supplierCollection';

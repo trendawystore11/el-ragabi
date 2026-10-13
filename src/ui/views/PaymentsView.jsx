@@ -39,6 +39,12 @@ function paymentBadge(payment) {
   if (payment.entityType === 'supplier' && payment.type === 'supplierCollection') {
     return { label: 'تحصيل نقدية من مورد (قبض)', cls: 'bg-teal-500/20 text-teal-300 border border-teal-500/30' }
   }
+  if (payment.type === 'customerDebtAdjustment') {
+    return {
+      label: (Number(payment.amount) || 0) < 0 ? 'تسوية مديونية عميل (زيادة رصيد)' : 'تسوية مديونية عميل (خصم رصيد)',
+      cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
+    }
+  }
   if (isRefund) {
     return { label: 'استرداد / رد عربون (صادر)', cls: 'bg-rose-500/20 text-rose-300 border border-rose-500/30' }
   }
@@ -58,7 +64,8 @@ function PaymentRow({ payment, canEdit, onRefresh }) {
   // كاش legacy) لكنه قبض وارد لصالح الخزينة → نعرضه موجَباً بأخضر/سماوي.
   const displayAmount = isSupplierCollection ? Math.abs(Number(payment.amount)) : Number(payment.amount)
 
-  const editable = canEdit && !payment.refOrderId
+  const isAdjustment = payment.type === 'customerDebtAdjustment'
+  const editable = canEdit && !payment.refOrderId && !isAdjustment
 
   const openEdit = () => useUiStore.getState().openPaymentEditModal(payment.id, onRefresh)
   const remove = () => {
@@ -102,7 +109,7 @@ function PaymentRow({ payment, canEdit, onRefresh }) {
             </Button>
           </div>
         ) : (
-          <span className="text-[11px] text-slate-500">{payment.refOrderId ? 'مرتبط بفاتورة' : '—'}</span>
+          <span className="text-[11px] text-slate-500">{payment.refOrderId ? 'مرتبط بفاتورة' : isAdjustment ? 'تسوية (تُدار من تعديل المديونية)' : '—'}</span>
         )}
       </td>
     </tr>

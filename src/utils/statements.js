@@ -21,6 +21,8 @@ export function getStatementTypeBadge(type) {
     'استرداد / رد مبلغ': 'bg-rose-500/20 text-rose-300 border-rose-500/30',
     'رصيد افتتاحي': 'bg-slate-700/40 text-slate-300 border-slate-600/40',
     'تسوية افتتاحية': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+    'تسوية مديونية عميل': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+    'تسوية مديونية مورد': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
     'شحنة توريد': 'bg-purple-500/20 text-purple-300 border-purple-500/30',
     'تسجيل منتج ومخزون': 'bg-purple-500/20 text-purple-300 border-purple-500/30',
     'مديونية عجز مخزون': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
@@ -68,6 +70,22 @@ export function buildCustomerStatementEntries(customerId) {
 
   window.getPaymentsByEntity('customer', customerId).forEach(p => {
     const amt = Number(p.amount) || 0;
+    // V3.65 — قيد تسوية المديونية اليدوي: موجب = يخفض ما على العميل (دائن)،
+    // سالب = يزيده (مدين). يُعرض كبند مستقل «تسوية مديونية عميل».
+    if (p.type === 'customerDebtAdjustment') {
+      const reduces = amt >= 0;
+      entries.push({
+        seq: seq++,
+        sortKey: p.createdAt || p.date || '',
+        date: p.createdAt || p.date || '',
+        type: 'تسوية مديونية عميل',
+        refId: p.id,
+        note: p.notes || 'تسوية مديونية يدوية — تعديل رصيد العميل',
+        debit: reduces ? 0 : Math.abs(amt),
+        credit: reduces ? amt : 0
+      });
+      return;
+    }
     const isRefund = amt < 0;
     entries.push({
       seq: seq++,

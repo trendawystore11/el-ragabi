@@ -113,15 +113,14 @@ describe('PaymentEditModal', () => {
 })
 
 describe('DebtEditModal', () => {
-  it('عميل: يملأ الرصيدين ويحفظ عبر adjustCustomerDebt', () => {
+  it('عميل: يملأ الرصيدين ويحفظ عبر adjustCustomerDebt كقيد تسوية', () => {
     useUiStore.setState({ debtEditModal: { open: true, entityType: 'customer', entityId: 'CUST-1', onDone: null } })
     const { unmount } = mount(<DebtEditModal />)
     expect(getInput('المسدد').value).toBe('400')
     expect(getInput('الرصيد المتبقي على العميل').value).toBe('600')
-    setInputValue(getInput('المسدد'), '250')
     setInputValue(getInput('الرصيد المتبقي على العميل'), '750')
     click(modalButtons().find(b => b.textContent.includes('حفظ تعديل المديونية')))
-    expect(window.adjustCustomerDebt).toHaveBeenCalledWith('CUST-1', { paid: 250, remainingBalance: 750 })
+    expect(window.adjustCustomerDebt).toHaveBeenCalledWith('CUST-1', expect.objectContaining({ remainingBalance: 750 }))
     expect(useUiStore.getState().debtEditModal.open).toBe(false)
     unmount()
   })
@@ -131,7 +130,7 @@ describe('DebtEditModal', () => {
     const { unmount } = mount(<DebtEditModal />)
     setInputValue(getInput('الرصيد المستحق للمورد'), '300')
     click(modalButtons().find(b => b.textContent.includes('حفظ تعديل المديونية')))
-    expect(window.adjustSupplierDebt).toHaveBeenCalledWith('SUP-1', { paid: 400, remainingBalance: 300 })
+    expect(window.adjustSupplierDebt).toHaveBeenCalledWith('SUP-1', expect.objectContaining({ remainingBalance: 300 }))
     unmount()
   })
 

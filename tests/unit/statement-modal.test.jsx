@@ -131,6 +131,18 @@ describe('StatementModal (ui/modals/StatementModal.jsx)', () => {
     unmount()
   })
 
+  it('قيد تسوية المديونية يظهر كبند مستقل في كشف الحساب', () => {
+    window.getCustomerById = vi.fn(() => CUSTOMER)
+    window.getPaymentsByEntity = vi.fn(() => [
+      { id: 'ADJ-1', amount: 200, type: 'customerDebtAdjustment', createdAt: '2024-01-04 12:00:00', isDownPayment: false, notes: 'تسوية مديونية' },
+    ])
+    const { unmount } = mount(<StatementModal />)
+    openStatement('customer', 'CUST-001')
+    expect(document.body.textContent).toContain('تسوية مديونية عميل')
+    expect(document.body.textContent).toContain('ADJ-1')
+    unmount()
+  })
+
   it('كشف بلا حركات يعرض رسالة فارغة', () => {
     window.getCustomerById = vi.fn(() => ({ ...CUSTOMER, remainingBalance: 0 }))
     const { unmount } = mount(<StatementModal />)

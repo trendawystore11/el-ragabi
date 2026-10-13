@@ -18,6 +18,8 @@ const TYPE_BADGE = {
   'استرداد / رد مبلغ': 'bg-rose-500/20 text-rose-300 border-rose-500/30',
   'رصيد افتتاحي': 'bg-slate-700/40 text-slate-300 border-slate-600/40',
   'تسوية افتتاحية': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+  'تسوية مديونية عميل': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+  'تسوية مديونية مورد': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
   'شحنة توريد': 'bg-purple-500/20 text-purple-300 border-purple-500/30',
   'تسجيل منتج ومخزون': 'bg-purple-500/20 text-purple-300 border-purple-500/30',
   'مديونية عجز مخزون': 'bg-amber-500/20 text-amber-300 border-amber-500/30',

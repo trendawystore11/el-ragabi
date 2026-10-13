@@ -1,9 +1,11 @@
 // =============================================================================
-// ui/modals/DebtEditModal.jsx — تعديل مباشر لمديونية عميل/مورد (المدير فقط) — V3.63
+// ui/modals/DebtEditModal.jsx — تعديل مديونية عميل/مورد (المدير فقط) — V3.65
 // -----------------------------------------------------------------------------
-// تعديل حقلي «المسدد» و«الرصيد المتبقي» مباشرةً (تصحيح يدوي) عبر
-// window.adjustCustomerDebt / window.adjustSupplierDebt. لا يمس الطلبات أو
-// الدفعات — الكتابة فوق الرصيدين فقط. قد تُعيد أي إعادة احتساب لاحقة ضبطهما.
+// يُسجَّل التعديل كـ **قيد تسوية دفترية** (customerDebtAdjustment للعميل داخل
+// الدفعات، وقيد «تسوية مديونية مورد» في دفتر الموردين) بقيمة الفرق، لا كتابة
+// فوق الرصيد. لذلك يصمد أمام أي إعادة احتساب، ويظهر فوراً في كشف الحساب، ولا
+// يمسّ الطلبات ولا الدفعات الفعلية ولا الخزينة.
+// يُدخل المدير الرصيد المتبقي المستهدف، ويُشتق «المسدد» تلقائياً.
 // =============================================================================
 import { useState } from 'react'
 import { Scale, AlertTriangle } from 'lucide-react'
@@ -12,7 +14,7 @@ import Input from '../components/Input.jsx'
 import Button from '../components/Button.jsx'
 import { useUiStore } from '../state/uiStore.js'
 import { showToast } from '../components/toastStore.js'
-import { formatCurrency, labelWithCurrency } from '@/utils/formatters'
+import { formatCurrency, labelWithCurrency, round2 } from '@/utils/formatters'
 
 function DebtEditModal() {
   const open = useUiStore(s => s.debtEditModal.open)
@@ -31,7 +33,8 @@ function DebtEditModalInner() {
     return window.getCustomerById ? window.getCustomerById(entityId) : null
   })
 
-  const [paid, setPaid] = useState(() => (entity ? String(Number(entity.paid) || 0) : '0'))
+  const paidValue = entity ? String(Number(entity.paid) || 0) : '0'
+  const currentRemaining = entity ? Number(entity.remainingBalance) || 0 : 0
   const [remaining, setRemaining] = useState(() => (entity ? String(Number(entity.remainingBalance) || 0) : '0'))
   const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState({})
@@ -39,6 +42,11 @@ function DebtEditModalInner() {
   const clearError = key => setErrors(prev => (prev[key] ? { ...prev, [key]: undefined } : prev))
 
   const entityLabel = isSupplier ? 'المورد / المصنع' : 'العميل'
+
+  const parsedRemaining = String(remaining).trim() === '' ? null : Number(remaining)
+  const adjustmentDelta = parsedRemaining !== null && Number.isFinite(parsedRemaining)
+    ? round2(currentRemaining - parsedRemaining)
+    : null
 
   if (!entity) {
     return (
@@ -58,10 +66,8 @@ function DebtEditModalInner() {
     e.preventDefault()
     if (submitting) return
 
-    const numPaid = Number(paid)
     const numRemaining = Number(remaining)
     const nextErrors = {}
-    if (String(paid).trim() === '' || !Number.isFinite(numPaid)) nextErrors.paid = 'يرجى إدخال قيمة مسدد صحيحة'
     if (String(remaining).trim() === '' || !Number.isFinite(numRemaining)) nextErrors.remaining = 'يرجى إدخال قيمة رصيد صحيحة'
     if (!isSupplier && numRemaining < 0) nextErrors.remaining = 'الرصيد المتبقي على العميل لا يمكن أن يكون سالباً'
     if (Object.keys(nextErrors).length > 0) {
@@ -72,12 +78,14 @@ function DebtEditModalInner() {
     setErrors({})
     setSubmitting(true)
     try {
+      const user = typeof window.getCurrentUser === 'function' ? window.getCurrentUser() : null
+      const createdBy = user && user.name ? user.name : 'المدير العام'
       if (isSupplier) {
-        window.adjustSupplierDebt(entityId, { paid: numPaid, remainingBalance: numRemaining })
+        window.adjustSupplierDebt(entityId, { remainingBalance: numRemaining, createdBy })
       } else {
-        window.adjustCustomerDebt(entityId, { paid: numPaid, remainingBalance: numRemaining })
+        window.adjustCustomerDebt(entityId, { remainingBalance: numRemaining, createdBy })
       }
-      showToast(`تم تحديث مديونية ${entityLabel} بنجاح`, 'success')
+      showToast(`تم تسجيل تسوية مديونية ${entityLabel} وتحديث الرصيد بنجاح`, 'success')
       close()
       if (typeof onDone === 'function') onDone()
     } catch (err) {
@@ -113,13 +121,14 @@ function DebtEditModalInner() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
-            label={labelWithCurrency('المسدد')}
+            label={labelWithCurrency('المسدد (الحالي)')}
             type="number"
             step="0.01"
-            value={paid}
-            onChange={v => { setPaid(v); clearError('paid') }}
-            error={errors.paid}
+            value={paidValue}
+            onChange={() => {}}
+            disabled
             textLeft
+            hint="يُعدّل عبر تسجيل/تعديل الدفعات، لا من هنا"
             className="num-font !text-emerald-400 !font-extrabold"
           />
           <Input
@@ -130,12 +139,26 @@ function DebtEditModalInner() {
             onChange={v => { setRemaining(v); clearError('remaining') }}
             error={errors.remaining}
             textLeft
+            autoFocus
             className="num-font !text-rose-400 !font-extrabold"
           />
         </div>
 
+        {adjustmentDelta !== null && adjustmentDelta !== 0 ? (
+          <div className="p-3 rounded-xl border flex justify-between items-center text-sm bg-amber-950/30 border-amber-800/40">
+            <span className="text-amber-300 font-bold">
+              {adjustmentDelta > 0
+                ? 'قيد تسوية يخفض المديونية بقيمة:'
+                : 'قيد تسوية يزيد المديونية بقيمة:'}
+            </span>
+            <span className="text-lg font-extrabold text-amber-400 num-font">{formatCurrency(adjustmentDelta)}</span>
+          </div>
+        ) : null}
+
         <p className="text-[11px] text-slate-500 leading-relaxed">
-          تعديل مباشر للرصيدين دون تعديل الطلبات أو الدفعات. أي إعادة احتساب لاحقة (تدقيق الأرصدة) قد تعيد ضبطهما من الطلبات والدفعات.
+          يُسجَّل التعديل كـ<b className="text-slate-400">قيد تسوية حقيقي في الدفتر</b> بقيمة الفرق (لا كتابة فوق الرصيد)،
+          فيظهر فوراً في كشف الحساب ويصمد أمام أي إعادة احتساب لاحقة، دون المساس بالطلبات أو الدفعات أو الخزينة.
+          يُشتق «المسدد» تلقائياً من الرصيد المتبقي.
           {isSupplier ? ' يُسمح برصيد سالب (مستحق لنا من المورد).' : ''}
         </p>
 

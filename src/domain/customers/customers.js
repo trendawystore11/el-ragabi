@@ -4,7 +4,7 @@
  * through the injected `repo`; constants come from customerRules.js.
  */
 import { normalizePhone } from '../../utils/phones.js';
-import { round2, toNumber, generateAutoId } from '../../utils/formatters.js';
+import { round2, toNumber, generateAutoId, formatCurrency } from '../../utils/formatters.js';
 import { getCairoFormattedDate } from '../../utils/formatters.js';
 import { DEFAULT_CUSTOMER_CATEGORY } from './customerRules.js';
 
@@ -208,9 +208,13 @@ export function recalculateCustomerBalance(customerId, repo) {
 
   const totalPurchases = round2(orders.reduce((sum, o) => sum + toNumber(o.totalAmount), 0));
   const totalDownPayments = round2(orders.reduce((sum, o) => sum + toNumber(o.downPayment), 0));
-  const totalDirectPayments = round2(payments.filter(p => !p.isDownPayment && !p.allocatedToOrders && toNumber(p.amount) > 0).reduce((sum, p) => sum + toNumber(p.amount), 0));
+  // V3.65 — التسويات اليدوية للمديونية (customerDebtAdjustment) قيود دفترية
+  // موقّعة تُحتسب في «المسدد» (سالب = زيادة المديونية). تُستثنى من الدفعات
+  // المباشرة حتى لا تُحتسب مرتين، فتصمد أمام أي إعادة احتساب.
+  const totalDirectPayments = round2(payments.filter(p => p.type !== 'customerDebtAdjustment' && !p.isDownPayment && !p.allocatedToOrders && toNumber(p.amount) > 0).reduce((sum, p) => sum + toNumber(p.amount), 0));
+  const totalAdjustments = round2(payments.filter(p => p.type === 'customerDebtAdjustment').reduce((sum, p) => sum + toNumber(p.amount), 0));
 
-  const totalPaid = round2(totalDownPayments + totalDirectPayments);
+  const totalPaid = round2(totalDownPayments + totalDirectPayments + totalAdjustments);
   // V3.15.1 — Keep an overpayment (credit balance) EXPLICIT.
   const rawBalance = round2(totalPurchases - totalPaid);
   const remainingBalance = round2(Math.max(0, rawBalance));
@@ -248,16 +252,50 @@ export function recalculateAllCustomerBalances(repo) {
 /* ===================== manual debt adjustment (admin only) ===================== */
 
 /**
- * adjustCustomerDebt — تعديل مباشر لحقلي «المسدد» و«المتبقي» لعميل (تصحيح يدوي
- * من المدير). لا يمس الطلبات ولا الدفعات؛ مجرد كتابة فوق الرصيدين.
- * 🔒 ملاحظة: أي إعادة احتساب لاحقة (recalculateCustomerBalance) قد تعيد ضبط
- * القيم من الطلبات والدفعات.
+ * adjustCustomerDebt — تعديل مديونية عميل (تصحيح يدوي من المدير) عبر تسجيل
+ * **قيد تسوية دفترية** (customerDebtAdjustment) بقيمة الفرق، بدل الكتابة فوق
+ * الرصيد. القيد يُحتسب في recalculateCustomerBalance فيصمد أمام أي إعادة
+ * احتساب، ويظهر كبند «تسوية مديونية» في كشف الحساب، ولا يمسّ الطلبات ولا
+ * الدفعات الفعلية ولا الخزينة (يُستثنى من computeTreasury).
+ * يُقبل الرصيد المتبقي المستهدف فقط ويُشتق «المسدد» تلقائياً.
  */
-export function adjustCustomerDebt(customerId, { paid, remainingBalance }, repo) {
+export function adjustCustomerDebt(customerId, { remainingBalance, createdBy = 'المدير العام', notes = '' } = {}, repo) {
   const customer = getCustomerById(repo.getCustomers(), customerId);
   if (!customer) throw new Error('العميل غير موجود');
-  const nextPaid = round2(Number(paid) || 0);
-  const nextRemaining = round2(Math.max(0, Number(remainingBalance) || 0));
-  updateCustomer(customerId, { paid: nextPaid, remainingBalance: nextRemaining }, repo);
+
+  const targetRemaining = round2(Math.max(0, Number(remainingBalance) || 0));
+
+  const orders = repo.getOrders().filter(o => o.customerId === customerId && o.status !== 'returned' && o.status !== 'cancelled');
+  const totalPurchases = round2(orders.reduce((sum, o) => sum + toNumber(o.totalAmount), 0));
+  const totalDownPayments = round2(orders.reduce((sum, o) => sum + toNumber(o.downPayment), 0));
+  const payments = repo.getPaymentsByEntity('customer', customerId);
+  const totalDirectPayments = round2(payments.filter(p => p.type !== 'customerDebtAdjustment' && !p.isDownPayment && !p.allocatedToOrders && toNumber(p.amount) > 0).reduce((sum, p) => sum + toNumber(p.amount), 0));
+  const existingAdjustments = round2(payments.filter(p => p.type === 'customerDebtAdjustment').reduce((sum, p) => sum + toNumber(p.amount), 0));
+
+  const basePaid = round2(totalDownPayments + totalDirectPayments);
+  // نريد: basePaid + totalAdjustments = totalPurchases − targetRemaining
+  const neededAdjustments = round2((totalPurchases - targetRemaining) - basePaid);
+  const delta = round2(neededAdjustments - existingAdjustments);
+
+  if (delta !== 0) {
+    repo.addFirestoreDoc(repo.storageKeys.PAYMENTS, {
+      id: generateAutoId('PAY'),
+      entityType: 'customer',
+      entityId: customerId,
+      entityName: customer.name,
+      amount: delta,
+      date: getCairoFormattedDate().slice(0, 10),
+      paymentMethod: 'other',
+      notes: notes || `تسوية مديونية العميل — تعديل الرصيد المتبقي إلى ${formatCurrency(targetRemaining)}`,
+      isDownPayment: false,
+      createdBy,
+      createdAt: getCairoFormattedDate(),
+      type: 'customerDebtAdjustment',
+      refOrderId: '',
+      cycleKey: ''
+    });
+  }
+
+  recalculateCustomerBalance(customerId, repo);
   return getCustomerById(repo.getCustomers(), customerId);
 }

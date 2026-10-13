@@ -124,7 +124,7 @@ export function computeTreasury(payments, orders) {
   }, 0)
 
   const standaloneCustomerCollected = list
-    .filter(p => p.entityType === 'customer' && (Number(p.amount) || 0) > 0 && !(p.isDownPayment && p.refOrderId))
+    .filter(p => p.entityType === 'customer' && p.type !== 'customerDebtAdjustment' && (Number(p.amount) || 0) > 0 && !(p.isDownPayment && p.refOrderId))
     .reduce((s, p) => s + (Number(p.amount) || 0), 0)
 
   const supplierCashBack = list
@@ -134,7 +134,7 @@ export function computeTreasury(payments, orders) {
   const totalInflow = round2(cappedOrderCollected + standaloneCustomerCollected + supplierCashBack)
 
   const customerRefunds = list
-    .filter(p => p.entityType === 'customer' && (Number(p.amount) || 0) < 0)
+    .filter(p => p.entityType === 'customer' && p.type !== 'customerDebtAdjustment' && (Number(p.amount) || 0) < 0)
     .reduce((s, p) => s + Math.abs(Number(p.amount) || 0), 0)
 
   const totalSupplierPayments = list

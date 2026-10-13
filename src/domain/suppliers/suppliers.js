@@ -3,7 +3,7 @@
  * Ported VERBATIM from js/services/suppliers.js (legacy).
  */
 import { normalizePhone } from '../../utils/phones.js';
-import { round2, generateAutoId } from '../../utils/formatters.js';
+import { round2, generateAutoId, formatCurrency } from '../../utils/formatters.js';
 import { getCairoFormattedDate } from '../../utils/formatters.js';
 
 /* ===================== pure query helpers ===================== */
@@ -98,15 +98,38 @@ export function updateSupplier(id, updatedFields, repo) {
 /* ===================== manual debt adjustment (admin only) ===================== */
 
 /**
- * adjustSupplierDebt — تعديل مباشر لحقلي «المسدد» و«الرصيد المستحق» لمورد
- * (تصحيح يدوي من المدير). يسمح برصيد سالب (مستحق لنا من المورد).
- * 🔒 أي إعادة احتساب لاحقة من دفتر الموردين (recalculateTotals) قد تعيد الضبط.
+ * adjustSupplierDebt — تعديل مديونية مورد (تصحيح يدوي من المدير) عبر تسجيل
+ * **قيد تسوية في دفتر الموردين** (supplierTransactions) بقيمة الفرق، بدل الكتابة
+ * فوق الرصيد. فيصمد أمام recalculateTotals ويظهر كبند «تسوية مديونية مورد» في
+ * كشف المورد. يُسمح برصيد سالب (مستحق لنا من المورد).
+ * يُقبل الرصيد المستحق المستهدف ويُشتق «المسدد» تلقائياً.
  */
-export function adjustSupplierDebt(supplierId, { paid, remainingBalance }, repo) {
+export function adjustSupplierDebt(supplierId, { remainingBalance, createdBy = 'المدير العام', notes = '' } = {}, repo) {
   const supplier = getSupplierById(repo.getSuppliers(), supplierId);
   if (!supplier) throw new Error('المورد غير موجود');
-  const nextPaid = round2(Number(paid) || 0);
-  const nextRemaining = round2(Number(remainingBalance) || 0);
-  updateSupplier(supplierId, { paid: nextPaid, remainingBalance: nextRemaining }, repo);
+  const targetRemaining = round2(Number(remainingBalance) || 0);
+
+  const txns = typeof repo.getSupplierTransactionsBySupplier === 'function'
+    ? repo.getSupplierTransactionsBySupplier(supplierId)
+    : [];
+  const ledgerNet = round2(txns.reduce((sum, t) => sum + (Number(t.debit) || 0) - (Number(t.credit) || 0), 0));
+  const delta = round2(targetRemaining - ledgerNet);
+
+  if (delta !== 0 && typeof repo.logSupplierTransaction === 'function') {
+    repo.logSupplierTransaction({
+      supplierId,
+      supplierName: supplier.name,
+      type: 'تسوية مديونية مورد',
+      refId: '',
+      debit: delta > 0 ? delta : 0,
+      credit: delta < 0 ? Math.abs(delta) : 0,
+      note: notes || `تسوية مديونية المورد — تعديل الرصيد المستحق إلى ${formatCurrency(targetRemaining)} (بواسطة ${createdBy})`,
+      date: getCairoFormattedDate()
+    });
+  }
+
+  const purchases = round2(Number(supplier.totalPurchases) || 0);
+  const newPaid = round2(Math.max(0, purchases - targetRemaining));
+  updateSupplier(supplierId, { paid: newPaid, remainingBalance: targetRemaining }, repo);
   return getSupplierById(repo.getSuppliers(), supplierId);
 }
