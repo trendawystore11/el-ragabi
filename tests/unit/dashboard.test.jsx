@@ -92,6 +92,7 @@ function click(el) {
 
 beforeEach(() => {
   window.getOrders = vi.fn(() => ORDERS)
+  window.getPayments = vi.fn(() => [])
   window.getProducts = vi.fn(() => PRODUCTS)
   window.STORAGE_KEYS = { SUPPLIERS: 'suppliers' }
   window.getCollection = vi.fn(() => SUPPLIERS)
@@ -142,6 +143,17 @@ describe('Dashboard (ui/views/Dashboard.jsx)', () => {
     expect(host.textContent).toContain('فواتير قيد الانتظار')
     expect(host.textContent).toContain(formatCurrency(700))
     expect(host.textContent).toContain(formatCompactCurrency(250))
+    unmount()
+  })
+
+  it('V3.65 — تسوية المديونية تخصم من بطاقة «ديون على العملاء»', () => {
+    window.getPayments = vi.fn(() => [
+      { id: 'ADJ-1', entityType: 'customer', entityId: 'CUST-2', type: 'customerDebtAdjustment', amount: 250 },
+    ])
+    const { host, unmount } = mount(<Dashboard />)
+    const card = Array.from(host.querySelectorAll('button')).find(b => b.textContent.includes('ديون على العملاء'))
+    expect(card).toBeTruthy()
+    expect(card.textContent).toContain(formatCompactCurrency(450))
     unmount()
   })
 

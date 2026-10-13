@@ -173,6 +173,19 @@ describe('payments pure helpers (parity with js/services/payments.js)', () => {
     expect(getTotalCustomerReceivables(orders)).toBe(800)
   })
 
+  it('V3.65 — getTotalCustomerReceivables reflects customer debt adjustments', () => {
+    const orders = [
+      { status: 'delivered', totalAmount: 1000, downPayment: 0 }, // 1000
+    ]
+    const adjustments = [
+      { entityType: 'customer', entityId: 'C1', type: 'customerDebtAdjustment', amount: 250 },
+      { entityType: 'supplier', entityId: 'S1', type: 'supplierDebtAdjustment', amount: 999 }, // ignored
+    ]
+    expect(getTotalCustomerReceivables(orders, adjustments)).toBe(750)
+    // backward compatible: no payments passed → order-based value unchanged
+    expect(getTotalCustomerReceivables(orders)).toBe(1000)
+  })
+
   it('getTotalSupplierPayables / getTotalPaymentsCollected', () => {
     expect(getTotalSupplierPayables([{ remainingBalance: 2000 }, { remainingBalance: 0.5 }])).toBe(2000.5)
     expect(getTotalPaymentsCollected([{ amount: 100 }, { amount: 0.1 }, { amount: 'x' }])).toBe(100.1)

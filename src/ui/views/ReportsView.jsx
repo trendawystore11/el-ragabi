@@ -343,7 +343,7 @@ function ReportsView() {
       filtered,
       calc,
       treasury,
-      totalRemainingReceivables: getTotalCustomerReceivables(orders),
+      totalRemainingReceivables: getTotalCustomerReceivables(orders, payments),
       pendingOrders,
       pendingTotalValue,
       pendingCollectedDeposits,

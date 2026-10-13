@@ -88,6 +88,22 @@ describe('computeTreasury — إدارة وتعديل الخزينة (V3.54)', (
     expect(supplier.remainingBalance).toBe(300)
   })
 
+  it('V3.65 — قيود تسوية مديونية العميل لا تظهر في «إجمالي المقبوضات» (وارد الخزينة)', () => {
+    const payments = [
+      { id: 'PAY-COL', entityType: 'customer', entityId: 'C1', amount: 400, type: '', isDownPayment: false, refOrderId: '' },
+      { id: 'PAY-ADJ', entityType: 'customer', entityId: 'C1', type: 'customerDebtAdjustment', amount: 250 },
+    ]
+    const t = computeTreasury(payments, [])
+    expect(t.totalInflow).toBe(400) // التسوية لا تدخل الوارد
+  })
+
+  it('إجمالي المقبوضات يعامل مردودات المورد النقدية كوارد (لا ينخفض باتساعها)', () => {
+    const small = computeTreasury([{ id: 'P', entityType: 'supplier', amount: -500, type: '' }], [])
+    const big = computeTreasury([{ id: 'P', entityType: 'supplier', amount: -745, type: '' }], [])
+    expect(small.totalInflow).toBe(500)
+    expect(big.totalInflow).toBe(745) // زيادة الاسترداد تزيد الوارد بدل أن تنقصه
+  })
+
   it('عجز فعلي سالب: تسوية صادرة تُطرح من الصافي', () => {
     const { db, repo } = freshSystem()
     createPaymentRecord(

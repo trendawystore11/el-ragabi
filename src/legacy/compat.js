@@ -210,7 +210,7 @@ window.getPaymentsByEntity = function (entityType, entityId) {
   return payments.getPaymentsByEntity(window.getPayments(), entityType, entityId);
 };
 window.getTotalCustomerReceivables = function () {
-  return payments.getTotalCustomerReceivables(window.getOrders());
+  return payments.getTotalCustomerReceivables(window.getOrders(), window.getPayments());
 };
 window.getTotalSupplierPayables = function () {
   return payments.getTotalSupplierPayables(window.getCollection(window.STORAGE_KEYS.SUPPLIERS));

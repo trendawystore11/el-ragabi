@@ -37,11 +37,21 @@ export function getPaymentsByEntity(payments, entityType, entityId) {
   return (payments || []).filter(p => p.entityType === entityType && p.entityId === entityId);
 }
 
-export function getTotalCustomerReceivables(orders) {
+/** V3.65 — Net customer debt-adjustment total (a positive entry reduces debt). */
+export function getCustomerDebtAdjustmentsTotal(payments) {
+  return round2((payments || [])
+    .filter(p => p.type === 'customerDebtAdjustment')
+    .reduce((sum, p) => sum + toNumber(p.amount), 0));
+}
+
+export function getTotalCustomerReceivables(orders, payments = []) {
   // V3.16 — Receivables derived DIRECTLY from ACTIVE orders.
-  return round2(orders
+  // V3.65 — Subtract customer debt adjustments (a positive entry reduces the
+  // debt) so the dashboard/report figures stay consistent with the statements.
+  const base = orders
     .filter(o => isActiveOrderStatus(o.status))
-    .reduce((sum, o) => sum + getOrderRemainingAmount(o), 0));
+    .reduce((sum, o) => sum + getOrderRemainingAmount(o), 0);
+  return round2(base - getCustomerDebtAdjustmentsTotal(payments));
 }
 
 export function getTotalSupplierPayables(suppliers) {

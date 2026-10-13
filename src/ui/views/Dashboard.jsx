@@ -29,7 +29,8 @@ import { useAuthStore } from '@/state/authStore'
 import { useSettingsStore } from '@/state/settingsStore'
 import { canSeeDashboard } from '@/services/permissions'
 import { calculateNetProfit, getOrderStatusLabel, getOrderRemainingAmount } from '@/domain/accounting/accounting'
-import { getTotalCustomerReceivables, getTotalSupplierPayables, getTotalPaymentsCollected } from '@/domain/accounting/payments'
+import { getTotalCustomerReceivables, getTotalSupplierPayables } from '@/domain/accounting/payments'
+import { computeTreasury } from '@/state/reportsStore'
 import { getOpenOrdersCount } from '@/domain/orders/orderRepository'
 import { getLowStockProducts } from '@/domain/inventory/products'
 import { formatCurrency, formatCompactCurrency, formatCurrencyEn, formatPhonePair, formatDate, toNumber } from '@/utils/formatters'
@@ -38,14 +39,18 @@ function readOrders() {
   return window.getOrders ? window.getOrders() : []
 }
 
-// HDI — الصف التشغيلي: المقبوضات النقدية الكلية من كل الإيصالات المسجلة.
+// HDI — الصف التشغيلي: إجمالي المقبوضات = وارد الخزينة الفعلي (تحصيلات العملاء
+// + مردودات الموردين النقدية)، وهو نفسه المستخدم في تقرير الخزينة. يستبعد قيود
+// تسوية المديونية (ليست كاش) ولا يتأثر باتجاه الاستردادات.
 function computeOps() {
   const payments = window.getPayments ? window.getPayments() : []
-  return { totalCollected: getTotalPaymentsCollected(payments) }
+  const orders = readOrders()
+  return { totalCollected: computeTreasury(payments, orders).totalInflow }
 }
 
 function computeStats() {
   const orders = readOrders()
+  const payments = window.getPayments ? window.getPayments() : []
   const products = window.getProducts ? window.getProducts() : []
   const suppliers = window.getCollection && window.STORAGE_KEYS ? window.getCollection(window.STORAGE_KEYS.SUPPLIERS) : []
   const calc = calculateNetProfit(orders, {
@@ -71,7 +76,7 @@ function computeStats() {
     netProfit: calc.netProfit,
     shippingRevenueIncome: calc.shippingRevenueIncome || 0,
     inventoryValuation,
-    customerReceivables: getTotalCustomerReceivables(orders),
+    customerReceivables: getTotalCustomerReceivables(orders, payments),
     supplierPayables: getTotalSupplierPayables(suppliers),
     openOrdersCount: getOpenOrdersCount(orders),
     lowStockCount: getLowStockProducts(products).length,
@@ -287,7 +292,7 @@ function Dashboard({ onNavigate }) {
             icon={Wallet}
             value={fmt(ops.totalCollected)}
             fullValue={formatCurrencyEn(ops.totalCollected)}
-            hint="إجمالي الإيصالات النقدية المسجلة"
+            hint="وارد الخزينة الفعلي (تحصيلات + مردودات الموردين)"
             onClick={() => onNavigate && onNavigate('payments')}
           />
           <KpiCard
