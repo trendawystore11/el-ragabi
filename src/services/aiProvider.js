@@ -34,11 +34,12 @@ const AI_KEY = storageKey('ai_config')
 // V3.50 — القيم الابتدائية تُقرأ من CLIENT_AI أو كاحتياط من CLIENT_DEFAULT (src/client/config.js)
 /**
  * V3.62 — Finding H: مستويات تقنين البيانات الشخصية في سياق المزوّد الخارجي.
- * - full:        كل البيانات كما هي (السلوك الافتراضي الحالي).
- * - noSensitive: الاسم والتصنيف يبقيان، مع حجب الملاحظات وأرصدة العملاء ومبالغ مشترياتهم.
- * - minimal:     أسماء العملاء/الموردين وبيانات اتصالهم وأرصدتهم تُستبدل بعميل/مورد مرقّم.
+ * - complete:     كل البيانات كاملة بلا أي إخفاء (الهواتف والعناوين بالأرقام الكاملة + الأرصدة والملاحظات).
+ * - full:         كل البيانات كما هي مع تقنيع الأرقام الشخصية (هواتف/عناوين) — الافتراضي الحالي.
+ * - noSensitive:  الاسم والتصنيف يبقيان، مع حجب الملاحظات وأرصدة العملاء ومبالغ مشترياتهم.
+ * - minimal:      أسماء العملاء/الموردين وبيانات اتصالهم وأرصدتهم تُستبدل بعميل/مورد مرقّم.
  */
-export const REDACT_LEVELS = ['full', 'noSensitive', 'minimal']
+export const REDACT_LEVELS = ['complete', 'full', 'noSensitive', 'minimal']
 
 /** تطبيع مستوى التقنين إلى قيمة صالحة (غير معروف → full = لا تغيير عن الحالي). */
 function normalizeRedactLevel(level) {
@@ -195,7 +196,7 @@ export function redactAddress(address) {
 /** سطر مفصل لكل منتج: الاسم/الكود/المخزون/الأسعار/المورد/الملاحظات. */
 function productLines(products = [], level = 'full') {
   const minimal = level === 'minimal'
-  const noNotes = level !== 'full'
+  const noNotes = level === 'noSensitive' || minimal
   return products.map(p => {
     const parts = [`- ${String(p.name || '').trim() || 'منتج بلا اسم'}`]
     if (p.code) parts.push(`كود ${p.code}`)
@@ -217,13 +218,15 @@ function productLines(products = [], level = 'full') {
 function customerLines(customers = [], level = 'full') {
   return customers.map((c, i) => {
     const minimal = level === 'minimal'
-    const noSensitive = level !== 'full'
+    const complete = level === 'complete'
+    const noSensitive = level === 'noSensitive' || minimal
     // V3.62 — Finding H: في «minimal» يُستبدل الاسم بعميل مرقّم.
     const parts = [minimal ? `- عميل ${i + 1}` : `- ${String(c.name || '').trim() || 'عميل بلا اسم'}`]
-    if (c.phone && !minimal) parts.push(`هاتف ${redactPhoneNumber(c.phone)}`)
-    if (c.secondaryPhone && !minimal) parts.push(`ثانوي ${redactPhoneNumber(c.secondaryPhone)}`)
+    // V3.62 — في «complete» تُبعث الهواتف والعناوين كاملة دون تقنين.
+    if (c.phone && !minimal) parts.push(`هاتف ${complete ? c.phone : redactPhoneNumber(c.phone)}`)
+    if (c.secondaryPhone && !minimal) parts.push(`ثانوي ${complete ? c.secondaryPhone : redactPhoneNumber(c.secondaryPhone)}`)
     if (c.category) parts.push(`تصنيف ${c.category}`)
-    if (c.address && !minimal) parts.push(`عنوان ${redactAddress(c.address)}`)
+    if (c.address && !minimal) parts.push(`عنوان ${complete ? c.address : redactAddress(c.address)}`)
     // V3.62 — إخفاء الأرصدة والمشتريات في noSensitive/minimal.
     if (!noSensitive) {
       parts.push(`إجمالي مشتريات ${num2(c.totalPurchases)}${currencySuffix()}`)
@@ -236,7 +239,8 @@ function customerLines(customers = [], level = 'full') {
 
 /** سطر مفصل لكل مصروف: البند/الفئة/المبلغ/التاريخ/الملاحظات. */
 function expenseLines(expenses = [], level = 'full') {
-  const noNotes = level !== 'full'
+  const minimal = level === 'minimal'
+  const noNotes = level === 'noSensitive' || minimal
   return expenses.map(e => {
     const parts = [`- ${String(e.title || e.name || '').trim() || 'مصروف بلا بيان'} (${String(e.category || 'عام').trim()})`]
     parts.push(`${num2(e.amount)}${currencySuffix()}`)
@@ -251,12 +255,14 @@ function expenseLines(expenses = [], level = 'full') {
 function supplierLines(suppliers = [], level = 'full') {
   return suppliers.map((s, i) => {
     const minimal = level === 'minimal'
-    const noNotes = level !== 'full'
+    const complete = level === 'complete'
+    const noNotes = level === 'noSensitive' || minimal
     // V3.62 — Finding H: في «minimal» يُستبدل الاسم بمورد مرقّم.
     const parts = [minimal ? `- مورد ${i + 1}` : `- ${String(s.name || '').trim() || 'مورد بلا اسم'}`]
-    if (s.phone && !minimal) parts.push(`هاتف ${redactPhoneNumber(s.phone)}`)
-    if (s.secondaryPhone && !minimal) parts.push(`ثانوي ${redactPhoneNumber(s.secondaryPhone)}`)
-    if (s.address && !minimal) parts.push(`عنوان: ${redactAddress(s.address)}`)
+    // V3.62 — في «complete» تُبعث الهواتف والعناوين كاملة دون تقنين.
+    if (s.phone && !minimal) parts.push(`هاتف ${complete ? s.phone : redactPhoneNumber(s.phone)}`)
+    if (s.secondaryPhone && !minimal) parts.push(`ثانوي ${complete ? s.secondaryPhone : redactPhoneNumber(s.secondaryPhone)}`)
+    if (s.address && !minimal) parts.push(`عنوان: ${complete ? s.address : redactAddress(s.address)}`)
     if (s.notes && !noNotes) parts.push(`ملاحظات: ${s.notes}`)
     return parts.join(' — ')
   })

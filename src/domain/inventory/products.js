@@ -49,7 +49,7 @@ export function getLowStockProducts(products) {
 
 /* ===================== orchestration ===================== */
 
-export function createProduct({ code, name, category, purchasePrice, sellingPrice, stock, minStock, supplierId = '', supplierName = '' }, repo) {
+export function createProduct({ code, name, category, purchasePrice, sellingPrice, stock, minStock, supplierId = '', supplierName = '', entryDate = null }, repo) {
   const numPurchasePrice = Number(purchasePrice) || 0;
   const numSellingPrice = Number(sellingPrice) || 0;
   if (numPurchasePrice < 0 || numSellingPrice < 0) {
@@ -88,6 +88,7 @@ export function createProduct({ code, name, category, purchasePrice, sellingPric
     minStock: numMinStock,
     supplierId,
     supplierName,
+    entryDate: (entryDate || now.slice(0, 10)),
     createdAt: now,
     updatedAt: now
   };
@@ -204,9 +205,6 @@ export function incrementProductStock(productId, qty, repo) {
   const product = getProductById(repo.getProducts(), productId);
   if (!product) return;
 
-  const currentStock = Number(product.stock) || 0;
-  const newStock = currentStock + Number(qty);
-
   repo.updateFirestoreDoc(repo.storageKeys.PRODUCTS, productId, {
     stock: increment(Number(qty) || 0),
     updatedAt: getCairoFormattedDate()
@@ -220,7 +218,7 @@ export function incrementProductStock(productId, qty, repo) {
  * supplier's debt; instead they are distributed into COGS, raising the product's
  * weighted-average cost per unit.
  */
-export function addStockShipment(productId, addedQty, supplierId = '', unitPurchasePrice = 0, notes = '', extras = {}, repo) {
+export function addStockShipment(productId, addedQty, supplierId = '', unitPurchasePrice = 0, notes = '', extras = {}, repo, shipmentDate = null) {
   const product = getProductById(repo.getProducts(), productId);
   if (!product) throw new Error('المنتج غير موجود');
 
@@ -288,9 +286,13 @@ export function addStockShipment(productId, addedQty, supplierId = '', unitPurch
           supplierName: supplier.name,
           type: 'شحنة توريد',
           refId: product.id,
+          productName: product.name,
+          qty: qty,
+          unitCost: costPerUnit,
           debit: totalShipmentCost,
           credit: 0,
           note: noteText,
+          shipmentDate: shipmentDate || getCairoFormattedDate().slice(0, 10),
           createdAt: getCairoFormattedDate()
         });
       } else {
@@ -301,8 +303,12 @@ export function addStockShipment(productId, addedQty, supplierId = '', unitPurch
             supplierName: supplier.name,
             type: 'شحنة توريد',
             refId: product.id,
+            productName: product.name,
+            qty: qty,
+            unitCost: costPerUnit,
             debit: totalShipmentCost,
             note: noteText,
+            shipmentDate: shipmentDate || getCairoFormattedDate().slice(0, 10),
             date: getCairoFormattedDate()
           });
         }
@@ -311,5 +317,104 @@ export function addStockShipment(productId, addedQty, supplierId = '', unitPurch
   }
 
   if (batch) batch.commit();
+}
+
+/** استخراج الكمية وسعر الوحدة من نص بيان شحنة قديمة (لقيود لم تُحفظ فيها الحقول). */
+function parseShipmentNote(note) {
+  const s = String(note || '').replace(/,/g, '');
+  const m = /\((\d+(?:\.\d+)?)\s*قطعة\s*×\s*(\d+(?:\.\d+)?)/.exec(s);
+  if (!m) return null;
+  return { qty: Number(m[1]), unitCost: Number(m[2]) };
+}
+
+/**
+ * Edit an existing stock supply shipment (admin-only correction) — V3.70.
+ *
+ * Corrects a shipment that was recorded with the wrong quantity and/or unit
+ * price. Adjusts, in one atomic write:
+ *   • product stock         (+ qtyDelta)
+ *   • supplier debt         (+ valueDelta on totalPurchases & remainingBalance)
+ *   • weighted-average cost (re-blended from the current embedded stock value)
+ * and updates the original ledger entry (supplier transaction) in place with an
+ * audit note — so no fake debt is left on the supplier and history is preserved.
+ *
+ * @param {string} txnId   SUPPLIER_TRANSACTIONS doc id (SUPLOG…)
+ * @param {{qty:number, unitCost:number, notes?:string}} changes
+ * @param {object} repo    injected repository
+ * @param {string} editedBy display name for the audit trail
+ */
+export function editStockShipment(txnId, changes, repo, editedBy = '') {
+  const txns = repo.getSupplierTransactions ? repo.getSupplierTransactions() : [];
+  const txn = txns.find(t => t.id === txnId);
+  if (!txn) throw new Error('لم يتم العثور على قيد الشحنة المطلوبة');
+  if (txn.type !== 'شحنة توريد' && txn.type !== 'تسجيل منتج ومخزون') {
+    throw new Error('هذا القيد ليس شحنة توريد قابلة للتعديل');
+  }
+
+  const product = getProductById(repo.getProducts(), txn.refId);
+  if (!product) throw new Error('المنتج المرتبط بالشحنة غير موجود');
+
+  const newQty = Number(changes && changes.qty);
+  if (isNaN(newQty) || newQty <= 0) throw new Error('يرجى إدخال كمية صحيحة أكبر من الصفر');
+  const newUnitCost = Number(changes && changes.unitCost);
+  if (isNaN(newUnitCost) || newUnitCost < 0) throw new Error('يرجى إدخال سعر شراء صحيح (0 أو أكثر)');
+
+  // Old quantity/unit cost: prefer explicit fields, else parse the note text.
+  let oldQty = Number.isFinite(Number(txn.qty)) && Number(txn.qty) > 0 ? Number(txn.qty) : null;
+  let oldUnitCost = Number.isFinite(Number(txn.unitCost)) && Number(txn.unitCost) >= 0 ? Number(txn.unitCost) : null;
+  if (oldQty === null || oldUnitCost === null) {
+    const parsed = parseShipmentNote(txn.note);
+    if (oldQty === null && parsed) oldQty = parsed.qty;
+    if (oldUnitCost === null && parsed) oldUnitCost = parsed.unitCost;
+  }
+  const oldDebit = round2(Number(txn.debit) || 0);
+  if (oldQty === null || !(oldQty > 0)) {
+    throw new Error('تعذّر تحديد الكمية الأصلية لهذه الشحنة القديمة تلقائياً — استخدم «مرتجع مشتريات» للتصحيح بدلاً من التعديل');
+  }
+  if (oldUnitCost === null) oldUnitCost = round2(oldDebit / oldQty);
+
+  const oldGoodsValue = round2(oldQty * oldUnitCost);
+  const deltaQty = newQty - oldQty;
+
+  const currentStock = Number(product.stock) || 0;
+  const newStock = currentStock + deltaQty;
+  if (newStock < 0) {
+    throw new Error(`لا يمكن تعديل الشحنة: المخزون الناتج سالب (${newStock}) لأن جزءاً من البضاعة تم بيعه أو صرفه بالفعل`);
+  }
+
+  const newDebit = round2(newQty * newUnitCost);
+  const debtDelta = round2(newDebit - oldDebit);
+
+  const oldPrice = Number(product.purchasePrice) || 0;
+  const totalCost = (currentStock * oldPrice) - oldGoodsValue + newDebit;
+  const newAvg = newStock > 0 ? Math.max(0, round2(totalCost / newStock)) : 0;
+
+  const stamp = getCairoFormattedDate();
+  const baseNote = (changes && typeof changes.notes === 'string') ? changes.notes.trim() : (txn.note || '').trim();
+  const auditNote = `${baseNote} — [تعديل ${stamp}${editedBy ? ' بواسطة ' + editedBy : ''}: كمية ${oldQty}→${newQty}، سعر ${oldUnitCost}→${newUnitCost}]`.trim();
+
+  const txnPayload = { qty: newQty, unitCost: newUnitCost, debit: newDebit, note: auditNote, updatedAt: stamp };
+  if (changes && changes.shipmentDate) {
+    txnPayload.shipmentDate = String(changes.shipmentDate).slice(0, 10);
+  } else if (txn.shipmentDate) {
+    txnPayload.shipmentDate = txn.shipmentDate;
+  }
+  const supplierPayload = txn.supplierId
+    ? { totalPurchases: increment(debtDelta), remainingBalance: increment(debtDelta) }
+    : null;
+
+  const batch = (typeof repo.createWriteBatch === 'function') ? repo.createWriteBatch() : null;
+  if (batch) {
+    batch.update(repo.storageKeys.PRODUCTS, product.id, { stock: newStock, purchasePrice: newAvg, updatedAt: stamp });
+    batch.update(repo.storageKeys.SUPPLIER_TRANSACTIONS, txn.id, txnPayload);
+    if (supplierPayload) batch.update(repo.storageKeys.SUPPLIERS, txn.supplierId, supplierPayload);
+    batch.commit();
+  } else {
+    repo.updateFirestoreDoc(repo.storageKeys.PRODUCTS, product.id, { stock: newStock, purchasePrice: newAvg, updatedAt: stamp });
+    repo.updateFirestoreDoc(repo.storageKeys.SUPPLIER_TRANSACTIONS, txn.id, txnPayload);
+    if (supplierPayload) repo.updateSupplier(txn.supplierId, supplierPayload);
+  }
+
+  return { productId: product.id, oldQty, newQty, oldUnitCost, newUnitCost, debtDelta, newAvg, newStock };
 }
 

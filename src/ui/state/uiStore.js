@@ -14,12 +14,15 @@ import {
   canUsePos,
   canUseAi,
   canManageProducts,
+  canEditShipment,
   canManageExpenses,
   canRecordPayment,
   canAddSupplier,
   canManageSettings,
   canManageUsers,
   canAdjustTreasury,
+  canEditPayments,
+  canEditDebt,
 } from '@/services/permissions'
 
 // 🔐 قراءة الدور الحالي من جلسة getCurrentUser (نفس مصدر الحقيقة في auth.js).
@@ -53,6 +56,8 @@ export const useUiStore = create(set => ({
 
   shipmentModal: { open: false, productId: null, onDone: null },
 
+  shipmentEditModal: { open: false, productId: null, onDone: null },
+
   supplierModal: { open: false, supplierId: null, onDone: null, initialData: null },
 
   supplierReturnModal: { open: false, supplierId: null, onDone: null },
@@ -62,6 +67,10 @@ export const useUiStore = create(set => ({
   wipeDatabaseModal: { open: false },
 
   paymentModal: { open: false, defaults: null, onDone: null },
+
+  paymentEditModal: { open: false, paymentId: null, onDone: null },
+
+  debtEditModal: { open: false, entityType: null, entityId: null, onDone: null },
 
   userModal: { open: false, userId: null, onDone: null },
 
@@ -232,6 +241,26 @@ export const useUiStore = create(set => ({
     set({ shipmentModal: { open: false, productId: null, onDone: null } })
   },
 
+  // 🔒 تعديل شحنة توريد مسجَّلة (كمية/سعر) — المدير فقط: يعدّل المخزون ومديونية
+  // المورد ومتوسط التكلفة. بلا صلاحية يعرض تنبيه الحظر ولا يفتح النافذة.
+  openShipmentEditModal(productId, onDone = null) {
+    if (!hasPermission(role => canEditShipment(role))) {
+      showToast('تعديل الشحنات المسجَّلة مخصص للمدير فقط', 'error')
+      return
+    }
+    set({
+      shipmentEditModal: {
+        open: true,
+        productId,
+        onDone: typeof onDone === 'function' ? onDone : null,
+      },
+    })
+  },
+
+  closeShipmentEditModal() {
+    set({ shipmentEditModal: { open: false, productId: null, onDone: null } })
+  },
+
   openAddSupplierModal(supplierId = null, onDone = null, initialData = null) {
     if (!hasPermission(role => canAddSupplier(role))) {
       showToast('إضافة أو تعديل مورد مخصصة للمدير فقط', 'error')
@@ -325,6 +354,45 @@ export const useUiStore = create(set => ({
 
   closePaymentModal() {
     set({ paymentModal: { open: false, defaults: null, onDone: null } })
+  },
+
+  // 🔒 تعديل / حذف قيد دفعة مسجَّلة (يعكس الرصيد) — المدير فقط.
+  openPaymentEditModal(paymentId, onDone = null) {
+    if (!hasPermission(role => canEditPayments(role))) {
+      showToast('تعديل أو حذف الدفعات مخصص للمدير فقط', 'error')
+      return
+    }
+    set({
+      paymentEditModal: {
+        open: true,
+        paymentId,
+        onDone: typeof onDone === 'function' ? onDone : null,
+      },
+    })
+  },
+
+  closePaymentEditModal() {
+    set({ paymentEditModal: { open: false, paymentId: null, onDone: null } })
+  },
+
+  // 🔒 تعديل مباشر لمديونية عميل/مورد (المسدد والمتبقي) — المدير فقط.
+  openDebtEditModal(entityType, entityId, onDone = null) {
+    if (!hasPermission(role => canEditDebt(role))) {
+      showToast('تعديل المديونية مخصص للمدير فقط', 'error')
+      return
+    }
+    set({
+      debtEditModal: {
+        open: true,
+        entityType: entityType === 'supplier' ? 'supplier' : 'customer',
+        entityId: entityId || null,
+        onDone: typeof onDone === 'function' ? onDone : null,
+      },
+    })
+  },
+
+  closeDebtEditModal() {
+    set({ debtEditModal: { open: false, entityType: null, entityId: null, onDone: null } })
   },
 
   // 🔒 لوحة إدارة الموظفين مخصصة للمدير العام فقط (نفس بوابة renderUsersView

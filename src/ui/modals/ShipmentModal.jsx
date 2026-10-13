@@ -15,7 +15,7 @@ import Select from '../components/Select.jsx'
 import Button from '../components/Button.jsx'
 import { useUiStore } from '../state/uiStore.js'
 import { showToast } from '../components/toastStore.js'
-import { round2, formatCurrency, labelWithCurrency } from '@/utils/formatters'
+import { round2, formatCurrency, labelWithCurrency, getCairoFormattedDate } from '@/utils/formatters'
 
 function ShipmentModal() {
   const open = useUiStore(s => s.shipmentModal.open)
@@ -35,6 +35,7 @@ function ShipmentModalInner() {
   const [unitPrice, setUnitPrice] = useState(product ? product.purchasePrice || '' : '')
   const [shippingCost, setShippingCost] = useState('0')
   const [suppliesCost, setSuppliesCost] = useState('0')
+  const [shipmentDate, setShipmentDate] = useState(getCairoFormattedDate().slice(0, 10))
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState({})
@@ -84,7 +85,8 @@ function ShipmentModalInner() {
         supplierId,
         unitPrice,
         notes,
-        { shippingCost, suppliesCost }
+        { shippingCost, suppliesCost },
+        shipmentDate
       )
       showToast(`تمت إضافة ${Number(qty)} قطعة للمخزون وتحديث حساب المورد بنجاح`, 'success')
       close()
@@ -146,7 +148,10 @@ function ShipmentModalInner() {
           </div>
         </div>
 
-        <Input label="بيانات وملاحظات الشحنة / رقم الفاتورة" value={notes} onChange={setNotes} placeholder="مثال: توريد شحنة من مصنع المورا فاتورة رقم 804" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input label="تاريخ الشحنة" type="date" value={shipmentDate} onChange={setShipmentDate} textLeft className="num-font" />
+          <Input label="بيانات وملاحظات الشحنة / رقم الفاتورة" value={notes} onChange={setNotes} placeholder="مثال: توريد شحنة من مصنع المورا فاتورة رقم 804" />
+        </div>
 
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="secondary" onClick={close}>إلغاء</Button>

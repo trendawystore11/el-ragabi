@@ -467,10 +467,27 @@ describe('services/aiProvider.js — V3.62 Finding H: مستويات تقنين 
     expect(ctx).toContain('«بطانية مورا» × 1 بسعر 1400 = 1400 ج.م')
   })
 
+  it('complete يبعث الهواتف والعناوين كاملة بلا تقنين مع بقاء الأرصدة والملاحظات (V3.62)', () => {
+    const ctx = buildContextForPrompt(sample(), { redactLevel: 'complete' })
+    expect(ctx).toContain('أحمد محمد')
+    expect(ctx).toContain('هاتف 01012345678')
+    expect(ctx).not.toContain('010****5678')
+    expect(ctx).toContain('هاتف 01123456789')
+    expect(ctx).not.toContain('011****6789')
+    expect(ctx).toContain('إجمالي مشتريات 900 ج.م')
+    expect(ctx).toContain('رصيد متبقي 300 ج.م')
+    expect(ctx).toContain('ملاحظات: يلزم الدفع')
+    expect(ctx).toContain('جودة عالية')
+    expect(buildContextForPrompt({ suppliers: [{ name: 'مصنع النور', phone: '01123456789', address: '12 شارع النصر برج 3' }] }, { redactLevel: 'complete' }))
+      .toContain('مصنع النور — هاتف 01123456789 — عنوان: 12 شارع النصر برج 3')
+  })
+
   it('مستوى التقنين يُحفظ في الإعدادات ويُقرأ منها، والقيم غير الصالحة تُطبّع إلى full', () => {
     expect(getAiConfig().redactLevel).toBe('full')
     saveAiConfig({ provider: 'gemini', apiKey: 'K', model: '', redactLevel: 'noSensitive' })
     expect(getAiConfig().redactLevel).toBe('noSensitive')
+    saveAiConfig({ provider: 'gemini', apiKey: 'K', model: '', redactLevel: 'complete' })
+    expect(getAiConfig().redactLevel).toBe('complete')
     saveAiConfig({ provider: 'gemini', apiKey: 'K', model: '', redactLevel: 'bogus' })
     expect(getAiConfig().redactLevel).toBe('full')
     expect(buildContextForPrompt(sample()).length).toBeGreaterThan(0)

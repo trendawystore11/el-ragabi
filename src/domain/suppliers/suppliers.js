@@ -94,3 +94,19 @@ export function updateSupplier(id, updatedFields, repo) {
   repo.updateFirestoreDoc(repo.storageKeys.SUPPLIERS, id, payload);
   return getSupplierById(repo.getSuppliers(), id);
 }
+
+/* ===================== manual debt adjustment (admin only) ===================== */
+
+/**
+ * adjustSupplierDebt — تعديل مباشر لحقلي «المسدد» و«الرصيد المستحق» لمورد
+ * (تصحيح يدوي من المدير). يسمح برصيد سالب (مستحق لنا من المورد).
+ * 🔒 أي إعادة احتساب لاحقة من دفتر الموردين (recalculateTotals) قد تعيد الضبط.
+ */
+export function adjustSupplierDebt(supplierId, { paid, remainingBalance }, repo) {
+  const supplier = getSupplierById(repo.getSuppliers(), supplierId);
+  if (!supplier) throw new Error('المورد غير موجود');
+  const nextPaid = round2(Number(paid) || 0);
+  const nextRemaining = round2(Number(remainingBalance) || 0);
+  updateSupplier(supplierId, { paid: nextPaid, remainingBalance: nextRemaining }, repo);
+  return getSupplierById(repo.getSuppliers(), supplierId);
+}

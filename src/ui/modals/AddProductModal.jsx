@@ -16,6 +16,7 @@ import Select from '../components/Select.jsx'
 import Button from '../components/Button.jsx'
 import { useUiStore } from '../state/uiStore.js'
 import { showToast } from '../components/toastStore.js'
+import { getCairoFormattedDate } from '@/utils/formatters'
 
 function AddProductModal() {
   const open = useUiStore(s => s.productModal.open)
@@ -55,6 +56,7 @@ function AddProductModalInner() {
     ? String(base.price)
     : (base.sellingPrice != null ? String(base.sellingPrice) : (hasPrefill ? '' : '1400')))
   const [minStock, setMinStock] = useState(base.minStock != null ? String(base.minStock) : (hasPrefill ? '' : '5'))
+  const [entryDate, setEntryDate] = useState(base.entryDate ? String(base.entryDate).slice(0, 10) : getCairoFormattedDate().slice(0, 10))
   const [notes, setNotes] = useState(base.notes ? String(base.notes) : '')
   const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState({})
@@ -133,6 +135,7 @@ function AddProductModalInner() {
       minStock: numMin,
       supplierId,
       supplierName: selected ? selected.name : '',
+      entryDate,
       notes,
     }
 
@@ -201,6 +204,7 @@ function AddProductModalInner() {
         </div>
 
         <Input label="الحد الأدنى للمخزون للتنبيه" type="number" value={minStock} onChange={v => { setMinStock(v); clearError('minStock') }} className="text-center text-amber-300" hint="عند انخفاض المخزون لهذه النسبة يظهر في النواقص" error={errors.minStock} />
+        <Input label="تاريخ دخول المخزون" type="date" value={entryDate} onChange={setEntryDate} textLeft className="num-font" />
         <Input label="ملاحظات وصفية" value={notes} onChange={setNotes} placeholder="خامة المنتج، المقاسات، اللون..." />
 
         <div className="flex justify-end gap-3 pt-2">

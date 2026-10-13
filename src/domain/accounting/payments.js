@@ -59,7 +59,7 @@ export function getTotalPaymentsCollected(payments) {
  *     updateCustomer, updateSupplier, addFirestoreDoc, updateFirestoreDoc,
  *     logSupplierTransaction, storageKeys }
  */
-export function createPaymentRecord({ entityType, entityId, entityName, amount, date, paymentMethod = 'cash', notes = '', isDownPayment = false, createdBy = 'المدير العام', type = '', refOrderId = '', cycleKey = '', isCollection = false }, repo) {
+export function createPaymentRecord({ entityType, entityId, entityName, amount, date, paymentMethod = 'cash', notes = '', isDownPayment = false, createdBy = 'المدير العام', type = '', refOrderId = '', cycleKey = '', isCollection = false, id = '', createdAt = '' }, repo) {
   const numericAmount = round2(parseFloat(amount));
   if (isNaN(numericAmount) || numericAmount === 0) {
     throw new Error('يرجى إدخال مبلغ صحيح');
@@ -138,8 +138,8 @@ export function createPaymentRecord({ entityType, entityId, entityName, amount, 
     }
   }
 
-  const paymentId = generateAutoId('PAY');
-  const now = getCairoFormattedDate();
+  const paymentId = id || generateAutoId('PAY');
+  const now = createdAt || getCairoFormattedDate();
 
   // V3.62 — تحصيل نقدية من مورد: يُسجَّل قيد قبض سالب (مثل convention استرداد
   // كاش legacy) فيرتفع رصيد المورد نحو الصفر، وتحتسبه الخزينة وارداً
@@ -254,4 +254,146 @@ export function createPaymentRecord({ entityType, entityId, entityName, amount, 
   }
 
   return newPayment;
+}
+
+/* ===================== edit / reverse / delete (admin-only flows) ===================== */
+
+/**
+ * reversePaymentRecord — يعكس الأثر المالي لقيد دفعة قائم (بدون حذف المستند).
+ * مطابق بالمعكوس لآثار createPaymentRecord:
+ *   - عميل: paid -= amount، remainingBalance -= balanceDelta، وإلغاء تخصيص
+ *     الطلبات (إرجاع المبلغ المُخصَّص من أحدث الطلبات المسدَّدة أولاً).
+ *   - مورد عادي: paid -= settlement، remainingBalance += settlement، وحذف قيد
+ *     الدفتر المرتبط (refId = paymentId).
+ *   - مورد (تحصيل نقدية): paid += amount، remainingBalance -= amount، وحذف
+ *     القيد المرتبط.
+ *   - خزينة: لا شيء (الرصيد مشتق من الدفعات).
+ * 🔒 يرفض عكس الدفعات المرتبطة بفاتورة (refOrderId) — يجب تعديل الفاتورة/حالتها.
+ */
+export function reversePaymentRecord(paymentId, repo) {
+  const payment = repo.getPayments().find(p => p.id === paymentId);
+  if (!payment) throw new Error('قيد الدفعة غير موجود');
+  if (payment.refOrderId) {
+    throw new Error('لا يمكن عكس/حذف دفعة مرتبطة بفاتورة — عدّل الفاتورة أو حالتها بدلاً من ذلك');
+  }
+
+  const numericAmount = round2(Number(payment.amount) || 0);
+  const isSupplierCollection = payment.entityType === 'supplier' && payment.type === 'supplierCollection';
+
+  if (payment.entityType === 'customer') {
+    const customer = repo.getCustomerById(payment.entityId);
+    if (customer) {
+      const balanceDelta = (numericAmount < 0 || payment.isDownPayment) ? 0 : -numericAmount;
+      repo.updateCustomer(payment.entityId, {
+        paid: increment(-numericAmount),
+        remainingBalance: increment(-balanceDelta)
+      });
+
+      // إلغاء تخصيص الدفعة على الطلبات: نُرجع المبلغ لأحدث الطلبات المسدَّدة أولاً.
+      if (!payment.isDownPayment && numericAmount > 0 && payment.allocatedToOrders) {
+        const orders = repo.getOrders();
+        const paidOrders = orders
+          .filter(o => o.customerId === payment.entityId
+            && o.status !== 'returned' && o.status !== 'cancelled'
+            && (Number(o.downPayment) || 0) > 0)
+          .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+        let remainingToRemove = numericAmount;
+        for (const order of paidOrders) {
+          if (remainingToRemove <= 0) break;
+          const orderDownPayment = Number(order.downPayment) || 0;
+          const removed = round2(Math.min(remainingToRemove, orderDownPayment));
+          const newDownPayment = round2(orderDownPayment - removed);
+          const newRemaining = round2((Number(order.remainingBalance) || 0) + removed);
+          repo.updateFirestoreDoc(repo.storageKeys.ORDERS, order.id, {
+            downPayment: newDownPayment,
+            remainingBalance: newRemaining,
+            paidInFull: newRemaining <= 0
+          });
+          remainingToRemove = round2(remainingToRemove - removed);
+        }
+      }
+    }
+  } else if (payment.entityType === 'supplier') {
+    const supplier = repo.getSupplierById(payment.entityId);
+    if (supplier) {
+      if (isSupplierCollection) {
+        repo.updateSupplier(payment.entityId, {
+          paid: increment(numericAmount),
+          remainingBalance: increment(-numericAmount)
+        });
+      } else {
+        const settlementDelta = numericAmount < 0 ? 0 : numericAmount;
+        repo.updateSupplier(payment.entityId, {
+          paid: increment(-settlementDelta),
+          remainingBalance: increment(settlementDelta)
+        });
+      }
+    }
+  }
+
+  // حذف قيود دفتر المورد المرتبطة بهذه الدفعة (تسديد دفعة / تحصيل نقدية).
+  if (payment.entityType === 'supplier' && typeof repo.getSupplierTransactions === 'function' && typeof repo.deleteFirestoreDoc === 'function') {
+    repo.getSupplierTransactions()
+      .filter(t => t.refId === paymentId)
+      .forEach(t => repo.deleteFirestoreDoc(repo.storageKeys.SUPPLIER_TRANSACTIONS, t.id));
+  }
+
+  return payment;
+}
+
+/**
+ * deletePaymentRecord — يحذف قيد دفعة مستقلة بعد عكس أثره المالي.
+ * يُرفض للدفعات المرتبطة بفاتورة. يعيد قيد الدفعة المحذوف.
+ */
+export async function deletePaymentRecord(paymentId, repo) {
+  const payment = reversePaymentRecord(paymentId, repo);
+  await repo.deleteFirestoreDoc(repo.storageKeys.PAYMENTS, paymentId);
+  return payment;
+}
+
+/**
+ * updatePaymentRecord — يعدّل قيد دفعة مستقلة (المبلغ/التاريخ/طريقة الدفع/
+ * الملاحظات) بنفس معرّف القيد وتاريخ إنشائه الأصلي:
+ *   1) يعكس الأثر القديم ويحذف المستند القديم.
+ *   2) يُنشئ القيد من جديد عبر createPaymentRecord بمعرّف مثبّت.
+ * يُرفض للدفعات المرتبطة بفاتورة. يعيد القيد الجديد.
+ */
+export async function updatePaymentRecord(paymentId, changes, repo) {
+  const old = repo.getPayments().find(p => p.id === paymentId);
+  if (!old) throw new Error('قيد الدفعة غير موجود');
+  if (old.refOrderId) {
+    throw new Error('لا يمكن تعديل دفعة مرتبطة بفاتورة — عدّل الفاتورة أو حالتها بدلاً من ذلك');
+  }
+
+  const isSupplierCollection = old.entityType === 'supplier' && old.type === 'supplierCollection';
+  const requestedType = changes && changes.type ? changes.type : old.type;
+  const nextType = isSupplierCollection ? 'supplierCollection' : (requestedType || undefined);
+  const rawAmount = changes && changes.amount !== undefined ? changes.amount : Math.abs(Number(old.amount) || 0);
+  const numericAmount = round2(parseFloat(rawAmount));
+  if (isNaN(numericAmount) || numericAmount === 0) throw new Error('يرجى إدخال مبلغ صحيح');
+
+  reversePaymentRecord(paymentId, repo);
+  await repo.deleteFirestoreDoc(repo.storageKeys.PAYMENTS, paymentId);
+
+  // createPaymentRecord يتوقع المبلغ «المنطقي»: موجب لوضع تحصيل المورد
+  // (ثم يخزّنه سالباً)، وبإشارته الفعلية لبقية الأنواع (استرداد = سالب).
+  const createAmount = isSupplierCollection ? Math.abs(numericAmount) : numericAmount;
+
+  const created = createPaymentRecord({
+    entityType: old.entityType,
+    entityId: old.entityId,
+    entityName: old.entityName,
+    amount: createAmount,
+    date: (changes && changes.date) || old.date,
+    paymentMethod: (changes && changes.paymentMethod) || old.paymentMethod,
+    notes: changes && changes.notes !== undefined ? changes.notes : old.notes,
+    isDownPayment: !!old.isDownPayment,
+    createdBy: old.createdBy,
+    type: nextType,
+    isCollection: isSupplierCollection,
+    id: paymentId,
+    createdAt: old.createdAt
+  }, repo);
+
+  return created;
 }

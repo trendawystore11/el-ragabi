@@ -355,6 +355,17 @@ window.createPaymentRecord = function (input) {
   return payments.createPaymentRecord(input, dataRepo());
 };
 
+// V3.63 — تعديل/حذف قيد دفعة مسجَّلة (مع عكس الرصيد) — المدير فقط (بوابة uiStore).
+window.reversePaymentRecord = function (paymentId) {
+  return payments.reversePaymentRecord(paymentId, dataRepo());
+};
+window.deletePaymentRecord = function (paymentId) {
+  return payments.deletePaymentRecord(paymentId, dataRepo());
+};
+window.updatePaymentRecord = function (paymentId, changes) {
+  return payments.updatePaymentRecord(paymentId, changes, dataRepo());
+};
+
 /* ===================== domain/accounting/expenses ===================== */
 // Register the 'expenses' collection key + raw reader — the legacy
 // js/services/expenses.js did this at load time, and db.js's syncCollections()
@@ -425,6 +436,7 @@ window.assertCustomerPhoneAvailable = function (phone, secondaryPhone, excludeId
 window.getCustomerById = function (id) { return customers.getCustomerById(dataRepo().getCustomers(), id); };
 window.createCustomer = function (data) { return customers.createCustomer(data, dataRepo()); };
 window.updateCustomer = function (id, fields) { return customers.updateCustomer(id, fields, dataRepo()); };
+window.adjustCustomerDebt = function (id, fields) { return customers.adjustCustomerDebt(id, fields, dataRepo()); };
 window.getCustomerAddresses = function (customerId) { return customers.getCustomerAddresses(customerId, dataRepo()); };
 window.addCustomerAddress = function (customerId, data) { return customers.addCustomerAddress(customerId, data, dataRepo()); };
 window.setDefaultCustomerAddress = function (customerId, addressId) { return customers.setDefaultCustomerAddress(customerId, addressId, dataRepo()); };
@@ -445,6 +457,7 @@ window.assertSupplierPhoneAvailable = function (phone, secondaryPhone, excludeId
 };
 window.createSupplier = function (data) { return suppliers.createSupplier(data, dataRepo()); };
 window.updateSupplier = function (id, fields) { return suppliers.updateSupplier(id, fields, dataRepo()); };
+window.adjustSupplierDebt = function (id, fields) { return suppliers.adjustSupplierDebt(id, fields, dataRepo()); };
 
 /* ===================== domain/inventory (products) ===================== */
 window.getProducts = function () { return products.getProducts(dataRepo().getProducts()); };
@@ -457,8 +470,11 @@ window.updateProduct = function (id, data) { return products.updateProduct(id, d
 window.deleteProduct = function (id) { return products.deleteProduct(id, dataRepo()); };
 window.decrementProductStock = function (productId, qty) { return products.decrementProductStock(productId, qty, dataRepo()); };
 window.incrementProductStock = function (productId, qty) { return products.incrementProductStock(productId, qty, dataRepo()); };
-window.addStockShipment = function (productId, addedQty, supplierId, unitPurchasePrice, notes, extras) {
-  return products.addStockShipment(productId, addedQty, supplierId, unitPurchasePrice, notes, extras, dataRepo());
+window.addStockShipment = function (productId, addedQty, supplierId, unitPurchasePrice, notes, extras, shipmentDate) {
+  return products.addStockShipment(productId, addedQty, supplierId, unitPurchasePrice, notes, extras, dataRepo(), shipmentDate);
+};
+window.editStockShipment = function (txnId, changes, editedBy) {
+  return products.editStockShipment(txnId, changes, dataRepo(), editedBy);
 };
 
 /* ===================== domain/inventory (supplier returns) ===================== */

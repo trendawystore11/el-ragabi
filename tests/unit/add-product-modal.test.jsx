@@ -179,6 +179,7 @@ describe('AddProductModal (ui/modals/AddProductModal.jsx) — وضع الإضا�
       minStock: 8,
       supplierId: 'SUP-1',
       supplierName: 'مصنع النور',
+      entryDate: expect.any(String),
       notes: 'خامة إسباني',
     })
     expect(lastToastMessage()).toContain('تم إضافة المنتج الجديد للمخزون')

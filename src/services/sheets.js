@@ -60,6 +60,9 @@ const SYNC_CFG = SHEETS_SYNC_CONFIG || CLIENT_SYNC || {};
 const DEFAULT_CONFIG = {
   // ── إعدادات الاتصال (مصدرها SYNC_CFG من config.js) ──
   webhookUrl:        SYNC_CFG.webhookUrl || '',   // Google Apps Script Web App URL
+  // V3.69 — مباشر: رابط الجدول نفسه يُفتح فوراً من زر «فتح الشيت» بدل تمريرة
+  // Webhook؛ إن تُرك فارغاً يفتح الـ webhook الذي يوجّه بدوره للجدول.
+  sheetUrl:          SYNC_CFG.sheetUrl   || '',
   direction:         SYNC_CFG.direction     || 'export', // 'export' | 'import' | 'both'
   frequency:         SYNC_CFG.frequency     || 'manual', // '15m' | '1h' | 'every-op' | 'manual'
   enabled:           SYNC_CFG.enabled       != null ? SYNC_CFG.enabled : false,
@@ -76,7 +79,7 @@ const DEFAULT_CONFIG = {
 // Whitelist of config keys persisted to localStorage (legacy OAuth-era fields
 // are deliberately NOT in this list — a save migrates them away permanently).
 const CFG_FIELDS = [
-  'webhookUrl', 'direction', 'frequency', 'enabled', 'debounceMs',
+  'webhookUrl', 'sheetUrl', 'direction', 'frequency', 'enabled', 'debounceMs',
   'lastSyncAt', 'lastSyncDirection', 'lastSyncRows', 'lastSyncStatus',
   'lastSyncError', 'cfgUpdatedAt'
 ];
@@ -1418,6 +1421,7 @@ NS.saveConfig = function (partial) {
   const raw = readJSON(CFG_KEY, {}) || {};
   const cfg = sanitizeConfig(Object.assign({}, DEFAULT_CONFIG, sanitizeConfig(raw), partial || {}));
   cfg.webhookUrl = String(cfg.webhookUrl || '').trim();
+  cfg.sheetUrl = String(cfg.sheetUrl || '').trim();
   if (['export', 'import', 'both'].indexOf(cfg.direction) === -1) cfg.direction = 'export';
   if (['15m', '1h', 'every-op', 'manual'].indexOf(cfg.frequency) === -1) cfg.frequency = 'manual';
   cfg.enabled = !!cfg.enabled;
@@ -1460,6 +1464,7 @@ function _persistConfig(cfg) {
     // no longer exist), so nothing sensitive is ever uploaded.
     const p = window.db.collection('settings').doc('syncConfig').set({
       webhookUrl: cfg.webhookUrl || '',
+      sheetUrl: cfg.sheetUrl || '',
       direction: cfg.direction || 'export',
       frequency: cfg.frequency || 'manual',
       enabled: !!cfg.enabled,
@@ -1523,6 +1528,7 @@ NS.hydrateConfigFromCloud = async function () {
       // only non-secret fields (webhookUrl is a public URL, not a credential).
       NS.saveConfig({
         webhookUrl: cloud.webhookUrl,
+        sheetUrl: cloud.sheetUrl,
         direction: cloud.direction,
         frequency: cloud.frequency,
         enabled: !!cloud.enabled,
@@ -1815,18 +1821,19 @@ NS.syncWithGoogleSheets = async function () {
 window.syncWithGoogleSheets = NS.syncWithGoogleSheets;
 
 // ----------------------------------------------------------------
-// V3.17 / V3.59 — Open the linked Google Sheet in a new browser tab.
-// Webhook mode has no client-side spreadsheet id (the Apps Script owns the
-// sheet), so this surfaces the webhook URL instead of a sheet link.
+// V3.17 / V3.59 / V3.67 / V3.69 — Open the linked Google Sheet in a new tab.
+// V3.69: a direct sheet URL (sheetUrl) configured in the settings panel opens
+// the spreadsheet straight away with NO Apps Script detour. Without it the
+// webhook URL (/exec) is opened — since V3.67 that redirects to the sheet.
 // ----------------------------------------------------------------
 NS.openSheetUrl = function () {
   const cfg = NS.getConfig() || {};
-  const url = String(cfg.webhookUrl || '').trim();
+  const direct = String(cfg.sheetUrl || '').trim();
+  const url = direct || String(cfg.webhookUrl || '').trim();
   if (!url) {
-    if (window.showToast) window.showToast('⚠️ لم يتم إدخال رابط Webhook في إعدادات الربط بعد', 'warning');
+    if (window.showToast) window.showToast('⚠️ أدخل رابط Webhook في إعدادات الربط أولاً', 'warning');
     return false;
   }
-  if (window.showToast) window.showToast('وضع الـ Webhook — الجدول تديره Apps Script؛ راجع الصفحة النصية للمزامنة للتأكد من الاستقبال', 'info');
   window.open(url, '_blank', 'noopener,noreferrer');
   return true;
 };
@@ -1865,6 +1872,9 @@ NS.renderSyncPanel = function (el, opts) {
     '    <input id="gs-webhook-url" type="text" placeholder="https://script.google.com/macros/s/.../exec" style="' + inputStyle + '" value="' + escapeAttr(cfg.webhookUrl) + '">' +
     '  </label>',
     '  <div style="font-size:11px;color:var(--ui-dim)">الربط الآن عبر Webhook بلا أي توكنات أو مفاتيح Google — السكربت يكتب البيانات في الجدول مباشرة.</div>',
+    '  <label>رابط الجدول مباشرة (اختياري — يجعل زر «فتح الشيت» يفتح الجدول فوراً)' +
+    '    <input id="gs-sheet-url" type="text" placeholder="https://docs.google.com/spreadsheets/d/..." style="' + inputStyle + '" value="' + escapeAttr(cfg.sheetUrl) + '">' +
+    '  </label>',
     '  <div style="display:flex;flex-wrap:wrap;gap:8px">' +
     '    <button id="gs-connect" style="' + btnStyle + ';background:#7c3aed">🔌 اختبار الاتصال</button>' +
     '  </div>',
@@ -1916,6 +1926,7 @@ NS.renderSyncPanel = function (el, opts) {
   const syncInputs = () => {
     const saved = NS.saveConfig({
       webhookUrl: wrap.querySelector('#gs-webhook-url').value.trim(),
+      sheetUrl: wrap.querySelector('#gs-sheet-url').value.trim(),
       direction: wrap.querySelector('#gs-direction').value,
       frequency: wrap.querySelector('#gs-frequency').value,
       enabled: wrap.querySelector('#gs-enabled').checked
@@ -2006,7 +2017,7 @@ NS.renderSyncPanel = function (el, opts) {
   // empty. Hydrate them into the just-rendered fields, guarded by a dirty flag
   // so nothing the user already typed is ever clobbered.
   let _panelDirty = false;
-  ['#gs-webhook-url', '#gs-direction', '#gs-frequency', '#gs-enabled']
+  ['#gs-webhook-url', '#gs-sheet-url', '#gs-direction', '#gs-frequency', '#gs-enabled']
     .forEach(sel => {
       const f = wrap.querySelector(sel);
       if (!f) return;
@@ -2020,6 +2031,7 @@ NS.renderSyncPanel = function (el, opts) {
       const c = NS.getConfig();
       const setVal = (sel, v) => { const el = wrap.querySelector(sel); if (el) el.value = v; };
       setVal('#gs-webhook-url', c.webhookUrl || '');
+      setVal('#gs-sheet-url', c.sheetUrl || '');
       const dir = wrap.querySelector('#gs-direction'); if (dir) dir.value = c.direction || 'export';
       const freq = wrap.querySelector('#gs-frequency'); if (freq) freq.value = c.frequency || 'manual';
       const en = wrap.querySelector('#gs-enabled'); if (en) en.checked = !!c.enabled;

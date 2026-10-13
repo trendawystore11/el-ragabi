@@ -157,7 +157,8 @@ describe('ShipmentModal (ui/modals/ShipmentModal.jsx)', () => {
       'SUP-1',
       '1100',
       'فاتورة 804',
-      { shippingCost: '100', suppliesCost: '50' }
+      { shippingCost: '100', suppliesCost: '50' },
+      expect.any(String)
     )
     expect(lastToastMessage()).toContain('تمت إضافة 15 قطعة للمخزون')
     expect(useUiStore.getState().shipmentModal.open).toBe(false)

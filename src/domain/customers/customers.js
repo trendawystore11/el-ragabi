@@ -244,3 +244,20 @@ export function recalculateAllCustomerBalances(repo) {
     recalculateCustomerBalance(c.id, repo);
   });
 }
+
+/* ===================== manual debt adjustment (admin only) ===================== */
+
+/**
+ * adjustCustomerDebt — تعديل مباشر لحقلي «المسدد» و«المتبقي» لعميل (تصحيح يدوي
+ * من المدير). لا يمس الطلبات ولا الدفعات؛ مجرد كتابة فوق الرصيدين.
+ * 🔒 ملاحظة: أي إعادة احتساب لاحقة (recalculateCustomerBalance) قد تعيد ضبط
+ * القيم من الطلبات والدفعات.
+ */
+export function adjustCustomerDebt(customerId, { paid, remainingBalance }, repo) {
+  const customer = getCustomerById(repo.getCustomers(), customerId);
+  if (!customer) throw new Error('العميل غير موجود');
+  const nextPaid = round2(Number(paid) || 0);
+  const nextRemaining = round2(Math.max(0, Number(remainingBalance) || 0));
+  updateCustomer(customerId, { paid: nextPaid, remainingBalance: nextRemaining }, repo);
+  return getCustomerById(repo.getCustomers(), customerId);
+}

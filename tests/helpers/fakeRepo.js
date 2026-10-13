@@ -8,15 +8,22 @@
 // this repo, so the tests exercise the whole domain layer — not a mock of it.
 import { generateAutoId, getCairoFormattedDate, resolveIncrementFields } from '@/utils/formatters'
 import { normalizePhone } from '@/utils/phones'
-import { createPaymentRecord as createPaymentRecordDomain } from '@/domain/accounting/payments'
+import {
+  createPaymentRecord as createPaymentRecordDomain,
+  reversePaymentRecord as reversePaymentRecordDomain,
+  deletePaymentRecord as deletePaymentRecordDomain,
+  updatePaymentRecord as updatePaymentRecordDomain,
+} from '@/domain/accounting/payments'
 import {
   createCustomer as createCustomerDomain,
   updateCustomer as updateCustomerDomain,
   recalculateCustomerBalance as recalculateCustomerBalanceDomain,
+  adjustCustomerDebt as adjustCustomerDebtDomain,
 } from '@/domain/customers/customers'
 import {
   createSupplier as createSupplierDomain,
   updateSupplier as updateSupplierDomain,
+  adjustSupplierDebt as adjustSupplierDebtDomain,
 } from '@/domain/suppliers/suppliers'
 import {
   createProduct as createProductDomain,
@@ -107,13 +114,18 @@ export function makeRepo(db) {
 
     createCustomer: (data) => createCustomerDomain(data, repo),
     updateCustomer: (id, fields) => updateCustomerDomain(id, fields, repo),
+    adjustCustomerDebt: (id, fields) => adjustCustomerDebtDomain(id, fields, repo),
     createSupplier: (data) => createSupplierDomain(data, repo),
     updateSupplier: (id, fields) => updateSupplierDomain(id, fields, repo),
+    adjustSupplierDebt: (id, fields) => adjustSupplierDebtDomain(id, fields, repo),
     createProduct: (input) => createProductDomain(input, repo),
     updateProduct: (id, data) => updateProductDomain(id, data, repo),
     decrementProductStock: (id, qty) => decrementProductStockDomain(id, qty, repo),
     incrementProductStock: (id, qty) => incrementProductStockDomain(id, qty, repo),
     createPaymentRecord: (input) => createPaymentRecordDomain(input, repo),
+    reversePaymentRecord: (id) => reversePaymentRecordDomain(id, repo),
+    deletePaymentRecord: (id) => deletePaymentRecordDomain(id, repo),
+    updatePaymentRecord: (id, changes) => updatePaymentRecordDomain(id, changes, repo),
     logSupplierTransaction: (txn) => logSupplierTransactionDomain(txn, repo),
     recalculateCustomerBalance: (customerId) => recalculateCustomerBalanceDomain(customerId, repo),
   }

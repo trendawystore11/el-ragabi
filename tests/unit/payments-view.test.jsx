@@ -8,6 +8,7 @@ import PaymentsView from '@/ui/views/PaymentsView'
 import PaymentModal from '@/ui/modals/PaymentModal'
 import { usePaymentsStore } from '@/state/paymentsStore'
 import { useUiStore } from '@/ui/state/uiStore'
+import { useAuthStore } from '@/state/authStore'
 import { useToastStore } from '@/ui/components/toastStore'
 import { formatCurrency, getCairoFormattedDate } from '@/utils/formatters'
 
@@ -100,22 +101,29 @@ const RESET_UI = {
   expenseModal: { open: false, expenseId: null, onDone: null },
   wipeDatabaseModal: { open: false },
   paymentModal: { open: false, defaults: null, onDone: null },
+  paymentEditModal: { open: false, paymentId: null, onDone: null },
+  debtEditModal: { open: false, entityType: null, entityId: null, onDone: null },
 }
 
 beforeEach(() => {
   usePaymentsStore.setState(RESET_PAYMENTS)
   useUiStore.setState(RESET_UI)
+  useAuthStore.setState({ user: ADMIN, authed: true, role: 'admin' })
   useToastStore.setState({ toasts: [] })
   window.getPayments = vi.fn(() => PAYMENTS)
   window.getCustomers = vi.fn(() => CUSTOMERS)
   window.getSuppliers = vi.fn(() => SUPPLIERS)
   window.getCurrentUser = vi.fn(() => ADMIN)
   window.createPaymentRecord = vi.fn(() => ({ id: 'PAY-NEW' }))
+  window.updatePaymentRecord = vi.fn(() => ({ id: 'PAY-001' }))
+  window.deletePaymentRecord = vi.fn(() => ({ id: 'PAY-001' }))
+  window.confirm = vi.fn(() => true)
 })
 
 afterEach(() => {
   usePaymentsStore.setState(RESET_PAYMENTS)
   useUiStore.setState(RESET_UI)
+  useAuthStore.setState({ user: null, authed: false, role: null })
   useToastStore.setState({ toasts: [] })
 })
 
@@ -191,6 +199,48 @@ describe('PaymentsView (ui/views/PaymentsView.jsx)', () => {
     const { host, unmount } = mount(<PaymentsView />)
     expect(host.querySelectorAll('tbody tr')).toHaveLength(1)
     expect(host.textContent).toContain('لا توجد مدفوعات مسجلة مطابقة للبحث')
+    unmount()
+  })
+
+  it('المدير: زر تعديل يفتح نافذة تعديل قيد الدفعة بمعرّفها', () => {
+    const { host, unmount } = mount(<PaymentsView />)
+    const rows = host.querySelectorAll('tbody tr')
+    const payRow = Array.from(rows).find(r => r.textContent.includes('PAY-001'))
+    const editBtn = Array.from(payRow.querySelectorAll('button')).find(b => b.textContent.includes('تعديل'))
+    click(editBtn)
+    expect(useUiStore.getState().paymentEditModal).toMatchObject({ open: true, paymentId: 'PAY-001' })
+    unmount()
+  })
+
+  it('المدير: زر حذف يستدعي deletePaymentRecord بعد التأكيد ويحدّث المخزن', () => {
+    const { host, unmount } = mount(<PaymentsView />)
+    const rows = host.querySelectorAll('tbody tr')
+    const payRow = Array.from(rows).find(r => r.textContent.includes('PAY-001'))
+    const delBtn = Array.from(payRow.querySelectorAll('button')).find(b => b.textContent.includes('حذف'))
+    click(delBtn)
+    expect(window.confirm).toHaveBeenCalled()
+    expect(window.deletePaymentRecord).toHaveBeenCalledWith('PAY-001')
+    const toasts = useToastStore.getState().toasts
+    expect(toasts[toasts.length - 1].message).toContain('تم حذف قيد الدفعة')
+    unmount()
+  })
+
+  it('الدفعة المرتبطة بفاتورة تُحجب من التعديل/الحذف وتُوسم «مرتبط بفاتورة»', () => {
+    window.getPayments = vi.fn(() => [
+      { id: 'PAY-ORD', entityType: 'customer', entityId: 'CUST-1', entityName: 'أحمد محمد', amount: 200, paymentMethod: 'cash', notes: 'عربون طلب', createdAt: '2026-08-05T10:00:00', refOrderId: 'ORD-1' },
+    ])
+    const { host, unmount } = mount(<PaymentsView />)
+    expect(host.textContent).toContain('مرتبط بفاتورة')
+    expect(Array.from(host.querySelectorAll('button')).find(b => b.textContent.trim() === 'تعديل')).toBeUndefined()
+    expect(Array.from(host.querySelectorAll('button')).find(b => b.textContent.trim() === 'حذف')).toBeUndefined()
+    unmount()
+  })
+
+  it('غير المدير (كاشير): لا تظهر أزرار تعديل/حذف الدفعات', () => {
+    useAuthStore.setState({ user: { id: 'USR-2', role: 'employee' }, authed: true, role: 'employee' })
+    const { host, unmount } = mount(<PaymentsView />)
+    expect(Array.from(host.querySelectorAll('button')).find(b => b.textContent.trim() === 'تعديل')).toBeUndefined()
+    expect(Array.from(host.querySelectorAll('button')).find(b => b.textContent.trim() === 'حذف')).toBeUndefined()
     unmount()
   })
 })

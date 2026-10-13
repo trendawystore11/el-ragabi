@@ -7,7 +7,7 @@
 // «تعديل»/«إضافة» تفتح AddCustomerModal — كلها عبر uiStore.
 // =============================================================================
 import { useMemo, useEffect } from 'react'
-import { Users, Search, UserPlus, Wallet, BookOpen, Edit3 } from 'lucide-react'
+import { Users, Search, UserPlus, Wallet, BookOpen, Edit3, Scale } from 'lucide-react'
 import Button from '../components/Button.jsx'
 import Input from '../components/Input.jsx'
 import Select from '../components/Select.jsx'
@@ -15,6 +15,8 @@ import Badge from '../components/Badge.jsx'
 import FilterBar from '../components/FilterBar.jsx'
 import { useCustomersStore, applyCustomerFilters } from '@/state/customersStore'
 import { useUiStore } from '../state/uiStore.js'
+import { useAuthStore } from '@/state/authStore'
+import { canEditDebt } from '@/services/permissions'
 import { CUSTOMER_CATEGORIES } from '@/domain/customers/customerRules'
 import { formatCurrency, formatPhonePair, formatAddress } from '@/utils/formatters'
 
@@ -27,7 +29,7 @@ const CATEGORY_VARIANT = {
   'عميل محتمل': 'error',
 }
 
-function CustomerRow({ customer }) {
+function CustomerRow({ customer, canEditDebt }) {
   const remaining = Number(customer.remainingBalance) || 0
   const collect = () =>
     useUiStore.getState().openPaymentModal({ entityType: 'customer', entityId: customer.id })
@@ -35,6 +37,8 @@ function CustomerRow({ customer }) {
     useUiStore.getState().openStatementModal('customer', customer.id)
   const edit = () =>
     useUiStore.getState().openAddCustomerModal(customer.id, () => useCustomersStore.getState().refresh())
+  const editDebt = () =>
+    useUiStore.getState().openDebtEditModal('customer', customer.id, () => useCustomersStore.getState().refresh())
 
   return (
     <tr>
@@ -62,6 +66,11 @@ function CustomerRow({ customer }) {
           <Button size="sm" variant="ghost" icon={Edit3} onClick={edit} className="text-brand-300 hover:bg-brand-500/10">
             تعديل
           </Button>
+          {canEditDebt ? (
+            <Button size="sm" variant="ghost" icon={Scale} onClick={editDebt} className="text-amber-300 hover:bg-amber-500/10">
+              تعديل المديونية
+            </Button>
+          ) : null}
         </div>
       </td>
     </tr>
@@ -81,6 +90,9 @@ function CustomersView() {
   }, [refresh])
 
   const rows = useMemo(() => applyCustomerFilters(customers, search, category), [customers, search, category])
+
+  const role = useAuthStore(s => s.role)
+  const canEditDebtPerm = canEditDebt(role)
 
   const openAdd = () => useUiStore.getState().openAddCustomerModal(null, () => useCustomersStore.getState().refresh())
 
@@ -135,7 +147,7 @@ function CustomersView() {
                   </td>
                 </tr>
               ) : (
-                rows.map(c => <CustomerRow key={c.id} customer={c} />)
+                rows.map(c => <CustomerRow key={c.id} customer={c} canEditDebt={canEditDebtPerm} />)
               )}
             </tbody>
           </table>

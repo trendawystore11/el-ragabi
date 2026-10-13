@@ -20,6 +20,9 @@ import {
   canSeeAnalytics,
   canSeeFinancialReports,
   canRecalcOrWipe,
+  canAdjustTreasury,
+  canEditPayments,
+  canEditDebt,
 } from '@/services/permissions'
 
 const ROLES = ['admin', 'employee', 'storekeeper', 'accountant']
@@ -31,7 +34,7 @@ describe('permissions (services/permissions.js) — V3.43 RBAC', () => {
       canManageUsers, canManageSettings, canManageExpenses, canManageProducts,
       canDeleteProduct, canAddSupplier, canSeePurchasePrice, canSeeSupplierContact,
       canViewAllOrders, canUpdateOrderStatus, canSeeDashboard, canSeeAnalytics, canSeeFinancialReports,
-      canRecalcOrWipe,
+      canRecalcOrWipe, canAdjustTreasury, canEditPayments, canEditDebt,
     ]
     gates.forEach(gate => expect(gate('admin'), gate.name).toBe(true))
   })
@@ -110,6 +113,15 @@ describe('permissions (services/permissions.js) — V3.43 RBAC', () => {
     expect(canManageSettings(null)).toBe(false)
     expect(canManageUsers(null)).toBe(false)
     expect(canRecalcOrWipe(undefined)).toBe(false)
+  })
+
+  it('تعديل الدفعات وتعديل المديونية — المدير فقط (لا للمحاسب ولا لغيره)', () => {
+    expect(canEditPayments('admin')).toBe(true)
+    expect(canEditDebt('admin')).toBe(true)
+    ;['employee', 'storekeeper', 'accountant', 'unknown', null, undefined].forEach(role => {
+      expect(canEditPayments(role), `canEditPayments:${role}`).toBe(false)
+      expect(canEditDebt(role), `canEditDebt:${role}`).toBe(false)
+    })
   })
 
   it('visibleNavItems حسب الدور', () => {

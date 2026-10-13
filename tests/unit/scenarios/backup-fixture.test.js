@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { importFullBackup, exportFullBackup } from '@/services/db'
 
-const seed = JSON.parse(readFileSync(new URL('file://' + process.cwd() + '/tests/fixtures/demo-data.json')))
+// V3.71 — مجلد tests/fixtures (بيانات اختبار) لا يُشحن لريبوهات العملاء (يستثنيه
+// المصنع)، لذا نتخطّى هذا الاختبار عند غياب الملف بدل الفشل. يبقى يعمل كاملاً في
+// قالب النظام حيث الملف موجود.
+const seedPath = process.cwd() + '/tests/fixtures/demo-data.json'
+const seed = existsSync(seedPath) ? JSON.parse(readFileSync(new URL('file://' + seedPath))) : null
 
-describe('demo-data.json — تنسيق «تصدير نسخة كاملة»', () => {
+describe.skipIf(!seed)('demo-data.json — تنسيق «تصدير نسخة كاملة»', () => {
   it('يجتاز عتبة الاستيراد الحقيقية ويُصدَّر من جديد بنفس السجلات', () => {
     // compat.js يسجّل مفتاح المصروفات وقت التشغيل — نحاكيه قبل الاستيراد
     window.STORAGE_KEYS.EXPENSES = 'expenses'

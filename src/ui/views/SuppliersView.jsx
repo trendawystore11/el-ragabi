@@ -8,17 +8,17 @@
 // حساب» يفتح StatementModal — كلها عبر uiStore.
 // =============================================================================
 import { useMemo, useEffect } from 'react'
-import { Truck, Search, Plus, Wallet, Undo2, BookOpen, Edit3 } from 'lucide-react'
+import { Truck, Search, Plus, Wallet, Undo2, BookOpen, Edit3, Scale } from 'lucide-react'
 import Button from '../components/Button.jsx'
 import Input from '../components/Input.jsx'
 import FilterBar from '../components/FilterBar.jsx'
 import { useSuppliersStore, applySupplierFilters } from '@/state/suppliersStore'
 import { useUiStore } from '../state/uiStore.js'
 import { useAuthStore } from '@/state/authStore'
-import { canAddSupplier, canRecordPayment, canSeeSupplierContact } from '@/services/permissions'
+import { canAddSupplier, canRecordPayment, canSeeSupplierContact, canEditDebt } from '@/services/permissions'
 import { formatCurrency, formatPhonePair, formatAddress } from '@/utils/formatters'
 
-function SupplierRow({ supplier, onRefresh, canContact, canPay, canManage }) {
+function SupplierRow({ supplier, onRefresh, canContact, canPay, canManage, canEditDebt }) {
   const remaining = Number(supplier.remainingBalance) || 0
 
   const pay = () =>
@@ -37,6 +37,9 @@ function SupplierRow({ supplier, onRefresh, canContact, canPay, canManage }) {
 
   const edit = () =>
     useUiStore.getState().openAddSupplierModal(supplier.id, onRefresh)
+
+  const editDebt = () =>
+    useUiStore.getState().openDebtEditModal('supplier', supplier.id, onRefresh)
 
   return (
     <tr>
@@ -78,6 +81,11 @@ function SupplierRow({ supplier, onRefresh, canContact, canPay, canManage }) {
               تعديل
             </Button>
           ) : null}
+          {canEditDebt ? (
+            <Button size="sm" variant="ghost" icon={Scale} onClick={editDebt} className="text-amber-300 hover:bg-amber-500/10">
+              تعديل المديونية
+            </Button>
+          ) : null}
         </div>
       </td>
     </tr>
@@ -97,6 +105,7 @@ function SuppliersView() {
   const canContact = canSeeSupplierContact(role)
   const canPay = canRecordPayment(role)
   const canManage = canAddSupplier(role)
+  const canEditDebtPerm = canEditDebt(role)
 
   useEffect(() => {
     refresh()
@@ -156,7 +165,7 @@ function SuppliersView() {
                   </td>
                 </tr>
               ) : (
-                rows.map(s => <SupplierRow key={s.id} supplier={s} onRefresh={refresh} canContact={canContact} canPay={canPay} canManage={canManage} />)
+                rows.map(s => <SupplierRow key={s.id} supplier={s} onRefresh={refresh} canContact={canContact} canPay={canPay} canManage={canManage} canEditDebt={canEditDebtPerm} />)
               )}
             </tbody>
           </table>

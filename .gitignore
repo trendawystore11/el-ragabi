@@ -40,3 +40,10 @@ src.zip
 test-logic.html
 tests/screenshots/
 backup/
+test-data/
+
+# factory internals — never shipped to client repos
+tools/
+
+# PII — ملفات نسخ احتياطي حقيقية لبيانات العملاء: لا تُرفع أبدًا
+tests/fixtures/

@@ -12,8 +12,11 @@ service cloud.firestore {
     // src/services/permissions.js حرفياً، حتى لا يستطيع أي حساب تجاوز
     // الواجهة عبر استدعاء window.db مباشرة والوصول لصلاحية أعلى مما يراها.
     //
-    // ⚠️ يجب اختبار هذا الملف عبر Firebase Emulator (firebase emulators:start
-    // --only firestore) قبل النشر — لم يُختبر هنا مقابل مشروع حي.
+    // V3.64 — نُشر حيّاً 2026-10-03 على أول عميل يتم تشغيله فعلاً. الاكتشاف:
+    // `get(...).data` على مستند غائب يولّد "Null value error" ويُسقط كل قاعدة
+    // تُقيَّم على قاعدة فارغة (كل أول دخول حي كان يفشل). حُلّ بدوال أدوار
+    // تعيد null بأمان بدل الانهيار. لا يزال يُنصح باختبار الإموليتور لأي
+    // تغيير جديد في هذا الملف.
     // =====================================================================
 
     function isSignedIn() {
@@ -24,25 +27,29 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/staff/$(uid));
     }
 
+    // V3.64 — أمان null: على قاعدة فارغة staffDoc() يرجع null، والولوج إلى
+    // `.data` على null يولّد "Null value error" ويقلب أي قاعدة تُقيَّم إلى
+    // PERMISSION_DENIED — وهو سبب فشل كل كتابات أول دخول حي لمشروع فارغ.
+    // staffRole() يرجع null للمستندات الغائبة بدل الانهيار.
     function staffRole(uid) {
-      return staffDoc(uid).data.role;
+      let doc = staffDoc(uid);
+      return (doc == null) ? null : doc.data.role;
     }
 
     function isStaff(uid) {
       return isSignedIn()
-        && staffDoc(uid).data != null
+        && staffRole(uid) != null
         && staffRole(uid) in ['admin', 'employee', 'storekeeper', 'accountant'];
     }
 
     function isAdmin(uid) {
       return isSignedIn()
-        && staffDoc(uid).data != null
         && staffRole(uid) == 'admin';
     }
 
     // ————— دوال دور مفردة (تطابق permissions.js) —————
     function isRole(uid, role) {
-      return isSignedIn() && staffDoc(uid).data != null && staffRole(uid) == role;
+      return isSignedIn() && staffRole(uid) == role;
     }
 
     // ————— البوتستراف الأول (مرة واحدة فقط، ومربوط بسجل المستخدم الفعلي) —————
@@ -61,8 +68,7 @@ service cloud.firestore {
         && request.auth.token.email == 'admin@store.com'
         && request.resource.data.email == 'admin@store.com'
         && request.resource.data.role == 'admin'
-        && !exists(/databases/$(database)/documents/users/USR-1001)
-        && !exists(/databases/$(database)/documents/staff);
+        && !exists(/databases/$(database)/documents/users/USR-1001);
     }
 
     function isFirstBootstrap(uid, docId) {
@@ -70,9 +76,9 @@ service cloud.firestore {
       return isSignedIn()
         && request.auth.uid == docId
         && request.auth.token.email == 'admin@store.com'
-        && seedUser.exists
+        && seedUser != null
+        && seedUser.data != null
         && seedUser.data.uid == request.auth.uid
-        && !exists(/databases/$(database)/documents/staff)
         // V3.58 — إغلاق البوتستراف الدائم: يشترط ألا يكون مفتاح
         // settings/staffBootstrapDone قد أُنشئ بعد (يُنشأ مرة واحدة ضمن أول
         // staff/{uid} في دفعة ذرية). فحتى لو أُفرغت مجموعة staff يدوياً من
@@ -89,7 +95,8 @@ service cloud.firestore {
       return isSignedIn()
         && request.auth.uid == request.resource.data.uid
         && request.auth.token.email == 'admin@store.com'
-        && seedUser.exists
+        && seedUser != null
+        && seedUser.data != null
         && seedUser.data.uid == request.auth.uid
         && !exists(/databases/$(database)/documents/settings/staffBootstrapDone)
         && request.resource.data.done == true;

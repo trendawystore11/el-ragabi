@@ -413,11 +413,12 @@ function CloudSyncModalInner() {
           onChange={value => setAiConfig(prev => ({ ...prev, redactLevel: value }))}
           disabled={sandboxActive}
           options={[
+            { value: 'complete', label: 'كل البيانات كاملة (بلا إخفاء الأرقام الشخصية)' },
             { value: 'full', label: 'كل البيانات (الافتراضي)' },
             { value: 'noSensitive', label: 'بدون ملاحظات وأرصدة العملاء' },
             { value: 'minimal', label: 'حد أدنى (بدون أسماء وأرقام العملاء)' },
           ]}
-          hint="يتحكم في البيانات الشخصية المرسلة للمزوّد مع كل سؤال — الافتراضي «كل البيانات» يحافظ على السلوك الحالي"
+          hint="يتحكم في البيانات الشخصية المرسلة للمزوّد مع كل سؤال — الافتراضي «كل البيانات» يخفي الأرقام الأخيرة من الهواتف، و«كاملة» يرسل الهواتف والعناوين بلا أي إخفاء"
         />
         {aiTestResult ? (
           <div

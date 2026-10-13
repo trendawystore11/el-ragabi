@@ -58,6 +58,7 @@ const OrderStatusModal = lazy(() => import('../modals/OrderStatusModal.jsx'))
 const AddCustomerModal = lazy(() => import('../modals/AddCustomerModal.jsx'))
 const AddProductModal = lazy(() => import('../modals/AddProductModal.jsx'))
 const ShipmentModal = lazy(() => import('../modals/ShipmentModal.jsx'))
+const ShipmentEditModal = lazy(() => import('../modals/ShipmentEditModal.jsx'))
 const AddSupplierModal = lazy(() => import('../modals/AddSupplierModal.jsx'))
 const SupplierReturnModal = lazy(() => import('../modals/SupplierReturnModal.jsx'))
 const AddExpenseModal = lazy(() => import('../modals/AddExpenseModal.jsx'))
@@ -70,6 +71,8 @@ const CloudSyncModal = lazy(() => import('../modals/CloudSyncModal.jsx'))
 const StatementModal = lazy(() => import('../modals/StatementModal.jsx'))
 const ContentModal = lazy(() => import('../modals/ContentModal.jsx'))
 const TreasuryAdjustModal = lazy(() => import('../modals/TreasuryAdjustModal.jsx'))
+const PaymentEditModal = lazy(() => import('../modals/PaymentEditModal.jsx'))
+const DebtEditModal = lazy(() => import('../modals/DebtEditModal.jsx'))
 import Card from '../components/Card.jsx'
 import Badge from '../components/Badge.jsx'
 import { useSettingsStore } from '@/state/settingsStore'
@@ -184,6 +187,7 @@ function AppShell() {
     customer: useUiStore(s => s.customerModal.open),
     product: useUiStore(s => s.productModal.open),
     shipment: useUiStore(s => s.shipmentModal.open),
+    shipmentEdit: useUiStore(s => s.shipmentEditModal.open),
     supplier: useUiStore(s => s.supplierModal.open),
     supplierReturn: useUiStore(s => s.supplierReturnModal.open),
     expense: useUiStore(s => s.expenseModal.open),
@@ -196,6 +200,8 @@ function AppShell() {
     statement: useUiStore(s => s.statementModal.open),
     content: useUiStore(s => s.contentModal.open),
     treasuryAdjust: useUiStore(s => s.treasuryAdjustModal.open),
+    paymentEdit: useUiStore(s => s.paymentEditModal.open),
+    debtEdit: useUiStore(s => s.debtEditModal.open),
   }
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
@@ -363,6 +369,7 @@ function AppShell() {
       {modalOpen.customer ? <Suspense fallback={null}><AddCustomerModal /></Suspense> : null}
       {modalOpen.product ? <Suspense fallback={null}><AddProductModal /></Suspense> : null}
       {modalOpen.shipment ? <Suspense fallback={null}><ShipmentModal /></Suspense> : null}
+      {modalOpen.shipmentEdit ? <Suspense fallback={null}><ShipmentEditModal /></Suspense> : null}
       {modalOpen.supplier ? <Suspense fallback={null}><AddSupplierModal /></Suspense> : null}
       {modalOpen.supplierReturn ? <Suspense fallback={null}><SupplierReturnModal /></Suspense> : null}
       {modalOpen.expense ? <Suspense fallback={null}><AddExpenseModal /></Suspense> : null}
@@ -375,6 +382,8 @@ function AppShell() {
       {modalOpen.statement ? <Suspense fallback={null}><StatementModal /></Suspense> : null}
       {modalOpen.content ? <Suspense fallback={null}><ContentModal /></Suspense> : null}
       {modalOpen.treasuryAdjust ? <Suspense fallback={null}><TreasuryAdjustModal /></Suspense> : null}
+      {modalOpen.paymentEdit ? <Suspense fallback={null}><PaymentEditModal /></Suspense> : null}
+      {modalOpen.debtEdit ? <Suspense fallback={null}><DebtEditModal /></Suspense> : null}
       <div className="app-frame flex v7-app-frame">
         <aside className="app-sidebar w-60 shrink-0 min-h-screen bg-slate-900/70 border-l border-slate-800 hidden md:flex flex-col v7-sidebar">
           <button

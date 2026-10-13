@@ -8,11 +8,14 @@
 // domain/accounting/payments.searchPayments (نفس window.searchPayments القديم).
 // =============================================================================
 import { useMemo, useEffect } from 'react'
-import { HandCoins, Plus, Search } from 'lucide-react'
+import { HandCoins, Plus, Search, Edit3, Trash2 } from 'lucide-react'
 import Button from '../components/Button.jsx'
 import { usePaymentsStore } from '@/state/paymentsStore'
 import { searchPayments } from '@/domain/accounting/payments'
 import { useUiStore } from '../state/uiStore.js'
+import { useAuthStore } from '@/state/authStore'
+import { canEditPayments } from '@/services/permissions'
+import { showToast } from '../components/toastStore.js'
 import { formatCurrency, formatDate } from '@/utils/formatters'
 
 function paymentMethodLabel(method) {
@@ -45,7 +48,7 @@ function paymentBadge(payment) {
   return { label: 'تسديد لمورد', cls: 'bg-purple-500/20 text-purple-300 border border-purple-500/30' }
 }
 
-function PaymentRow({ payment }) {
+function PaymentRow({ payment, canEdit, onRefresh }) {
   const isRefund = (Number(payment.amount) || 0) < 0
   const isSupplierCollection = payment.entityType === 'supplier' && payment.type === 'supplierCollection'
   const isTreasuryInflow = payment.entityType === 'treasury' && !isRefund
@@ -54,6 +57,23 @@ function PaymentRow({ payment }) {
   // V3.62 — قيد التحصيل من المورد مخزَّن بقيمة سالبة (مثل convention استرداد
   // كاش legacy) لكنه قبض وارد لصالح الخزينة → نعرضه موجَباً بأخضر/سماوي.
   const displayAmount = isSupplierCollection ? Math.abs(Number(payment.amount)) : Number(payment.amount)
+
+  const editable = canEdit && !payment.refOrderId
+
+  const openEdit = () => useUiStore.getState().openPaymentEditModal(payment.id, onRefresh)
+  const remove = () => {
+    if (typeof window.confirm === 'function') {
+      const ok = window.confirm(`تأكيد حذف قيد الدفعة ${payment.id} بمبلغ ${formatCurrency(Number(payment.amount) || 0)}؟ سيُعكَس أثره على الرصيد.`)
+      if (!ok) return
+    }
+    try {
+      window.deletePaymentRecord(payment.id)
+      showToast('تم حذف قيد الدفعة وعكس أثره على الرصيد', 'success')
+      if (typeof onRefresh === 'function') onRefresh()
+    } catch (err) {
+      showToast((err && err.message) || String(err), 'error')
+    }
+  }
 
   return (
     <tr>
@@ -71,6 +91,20 @@ function PaymentRow({ payment }) {
         {formatDate(payment.createdAt || payment.date)}
       </td>
       <td className="text-xs text-slate-400">{payment.createdBy || 'المدير العام'}</td>
+      <td>
+        {editable ? (
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <Button size="sm" variant="ghost" icon={Edit3} onClick={openEdit} className="text-sky-400 hover:bg-sky-950/40 hover:text-sky-300">
+              تعديل
+            </Button>
+            <Button size="sm" variant="ghost" icon={Trash2} onClick={remove} className="text-rose-400 hover:bg-rose-950/40 hover:text-rose-300">
+              حذف
+            </Button>
+          </div>
+        ) : (
+          <span className="text-[11px] text-slate-500">{payment.refOrderId ? 'مرتبط بفاتورة' : '—'}</span>
+        )}
+      </td>
     </tr>
   )
 }
@@ -86,6 +120,9 @@ function PaymentsView() {
   }, [refresh])
 
   const rows = useMemo(() => searchPayments(payments, search), [payments, search])
+
+  const role = useAuthStore(s => s.role)
+  const canEdit = canEditPayments(role)
 
   const openRecordModal = () =>
     useUiStore.getState().openPaymentModal({}, () => usePaymentsStore.getState().refresh())
@@ -131,17 +168,18 @@ function PaymentsView() {
                 <th>الملاحظات</th>
                 <th>التاريخ</th>
                 <th>المسجل</th>
+                <th>العمليات</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-10 text-slate-500">
+                  <td colSpan={9} className="text-center py-10 text-slate-500">
                     لا توجد مدفوعات مسجلة مطابقة للبحث
                   </td>
                 </tr>
               ) : (
-                rows.map(p => <PaymentRow key={p.id} payment={p} />)
+                rows.map(p => <PaymentRow key={p.id} payment={p} canEdit={canEdit} onRefresh={refresh} />)
               )}
             </tbody>
           </table>

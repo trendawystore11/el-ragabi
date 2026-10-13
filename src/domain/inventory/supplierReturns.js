@@ -30,7 +30,7 @@ export function getSupplierTransactionsBySupplier(txns, supplierId) {
  * debit  = amount that increases our debt to the supplier
  * credit = amount that decreases our debt to the supplier
  */
-export function logSupplierTransaction({ supplierId, supplierName, type, refId = '', debit = 0, credit = 0, note = '', date = null }, repo) {
+export function logSupplierTransaction({ supplierId, supplierName, type, refId = '', debit = 0, credit = 0, note = '', date = null, qty = null, unitCost = null, productName = '', shipmentDate = null }, repo) {
   const txn = {
     id: generateAutoId('SUPLOG'),
     supplierId,
@@ -42,6 +42,10 @@ export function logSupplierTransaction({ supplierId, supplierName, type, refId =
     note: (note || '').trim(),
     createdAt: date || getCairoFormattedDate()
   };
+  if (qty !== null && qty !== undefined && qty !== '') txn.qty = Number(qty);
+  if (unitCost !== null && unitCost !== undefined && unitCost !== '') txn.unitCost = Number(unitCost);
+  if (productName) txn.productName = productName;
+  if (shipmentDate) txn.shipmentDate = String(shipmentDate).slice(0, 10);
   return repo.addFirestoreDoc(repo.storageKeys.SUPPLIER_TRANSACTIONS, txn);
 }
 

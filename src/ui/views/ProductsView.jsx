@@ -7,7 +7,7 @@
 // ShipmentModal/AddProductModal عبر uiStore، و«حذف» عبر الجسر window.deleteProduct.
 // =============================================================================
 import { useMemo, useEffect, useState } from 'react'
-import { Package, Search, PackagePlus, Edit3, Trash2, AlertOctagon, AlertTriangle } from 'lucide-react'
+import { Package, Search, PackagePlus, PackageSearch, Edit3, Trash2, AlertOctagon, AlertTriangle } from 'lucide-react'
 import Button from '../components/Button.jsx'
 import Input from '../components/Input.jsx'
 import Select from '../components/Select.jsx'
@@ -16,7 +16,7 @@ import FilterBar from '../components/FilterBar.jsx'
 import { useProductsStore, applyProductFilters } from '@/state/productsStore'
 import { useAuthStore } from '@/state/authStore'
 import { useUiStore } from '../state/uiStore.js'
-import { canManageProducts, canDeleteProduct, canSeePurchasePrice } from '@/services/permissions'
+import { canManageProducts, canDeleteProduct, canEditShipment, canSeePurchasePrice } from '@/services/permissions'
 import { formatCurrency } from '@/utils/formatters'
 import { showToast } from '../components/toastStore.js'
 
@@ -28,7 +28,7 @@ function stockStatus(p) {
   return stock <= threshold ? 'low' : 'ok'
 }
 
-function ProductRow({ product, onRefresh, canManage, canDelete, showPurchasePrice }) {
+function ProductRow({ product, onRefresh, canManage, canDelete, canEditShipment, showPurchasePrice }) {
   const status = stockStatus(product)
   const sku = product.code || product.id
   const stock = Number(product.stock) || 0
@@ -36,6 +36,8 @@ function ProductRow({ product, onRefresh, canManage, canDelete, showPurchasePric
 
   const openShipment = () =>
     useUiStore.getState().openShipmentModal(product.id, onRefresh)
+  const editShipment = () =>
+    useUiStore.getState().openShipmentEditModal(product.id, onRefresh)
   const openEdit = () =>
     useUiStore.getState().openAddProductModal(product.id, onRefresh)
 
@@ -100,6 +102,11 @@ function ProductRow({ product, onRefresh, canManage, canDelete, showPurchasePric
             <Button size="sm" variant="ghost" icon={Edit3} onClick={openEdit} className="text-brand-300 hover:bg-brand-500/10">
               تعديل
             </Button>
+            {canEditShipment ? (
+              <Button size="sm" variant="ghost" icon={PackageSearch} onClick={editShipment} className="text-purple-300 hover:bg-purple-500/10">
+                تعديل شحنة
+              </Button>
+            ) : null}
             {canDelete ? (
               <Button size="sm" variant="ghost" icon={Trash2} onClick={remove} loading={deleting} disabled={deleting} className="text-rose-300 hover:bg-rose-500/10">
                 حذف
@@ -131,6 +138,7 @@ function ProductsView() {
   const role = useAuthStore(s => s.role)
   const canManage = canManageProducts(role)
   const canDelete = canDeleteProduct(role)
+  const canEditShipmentPerm = canEditShipment(role)
   const showPurchasePrice = canSeePurchasePrice(role)
 
   useEffect(() => {
@@ -213,6 +221,7 @@ function ProductsView() {
                     onRefresh={refresh}
                     canManage={canManage}
                     canDelete={canDelete}
+                    canEditShipment={canEditShipmentPerm}
                     showPurchasePrice={showPurchasePrice}
                   />
                 ))

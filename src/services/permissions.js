@@ -78,6 +78,9 @@ export const canManageProducts = role => role === 'admin' || role === 'storekeep
 /** حذف منتج من المخزون — المدير فقط. */
 export const canDeleteProduct = role => role === 'admin'
 
+/** تعديل شحنة توريد مسجَّلة (كمية/سعر) — المدير فقط (يعدّل المخزون والمديونية). */
+export const canEditShipment = role => role === 'admin'
+
 /** إضافة مورد جديد — المدير فقط. */
 export const canAddSupplier = role => role === 'admin'
 
@@ -107,6 +110,12 @@ export const canRecalcOrWipe = role => role === 'admin'
 
 /** تسوية / ضبط رصيد الخزينة اليدوي (قيد تعديل يصحح رصيد الصندوق) — المدير فقط. */
 export const canAdjustTreasury = role => role === 'admin'
+
+/** تعديل / حذف قيد دفعة مسجَّلة (مع عكس الرصيد) — المدير فقط. */
+export const canEditPayments = role => role === 'admin'
+
+/** تعديل مباشر لمديونية عميل/مورد (حقلي المسدد والمتبقي) — المدير فقط. */
+export const canEditDebt = role => role === 'admin'
 
 /* ————— دوال اختصار تقرأ الدور الحالي ————— */
 
@@ -139,6 +148,7 @@ if (typeof window !== 'undefined') {
     canManageExpenses,
     canManageProducts,
     canDeleteProduct,
+    canEditShipment,
     canAddSupplier,
     canSeePurchasePrice,
     canSeeSupplierContact,
@@ -149,5 +159,7 @@ if (typeof window !== 'undefined') {
     canSeeFinancialReports,
     canRecalcOrWipe,
     canAdjustTreasury,
+    canEditPayments,
+    canEditDebt,
   }
 }
