@@ -146,12 +146,18 @@ service cloud.firestore {
     }
 
     // suppliers — canAddSupplier: admin فقط لإنشاء مورد جديد. تحديث الرصيد
-    // يحدث تلقائياً من عدة تدفقات (منتجات/طلبات/مدفوعات) لذا التحديث مفتوح
-    // لكل عضو فريق نشط، لكن الإنشاء والحذف للمدير فقط.
+    // يحدث تلقائياً من تدفقات الأصناف (توريد المخزون/مرتجعات الموردين) ومن
+    // تحرير بيانات المورد في شاشة الموردين — وكلها متاحة للمخزّن/المحاسب فقط.
+    // V3.70 — كان التحديث مفتوحاً لكل عضو فريق (isStaff)، فأُقفل على من يحتاجه
+    // فعلاً: admin/storekeeper/accountant. الكاشير (employee) لا يكتب على
+    // `suppliers` إطلاقاً (تدفق الطلب يكتب orders/customers/payments/products
+    // فقط — لا يوجد أي write على SUPPLIERS في orderRepository.js).
     match /suppliers/{docId} {
       allow read: if isStaff(request.auth.uid);
       allow create: if isAdmin(request.auth.uid);
-      allow update: if isStaff(request.auth.uid);
+      allow update: if isAdmin(request.auth.uid)
+        || isRole(request.auth.uid, 'storekeeper')
+        || isRole(request.auth.uid, 'accountant');
       allow delete: if isAdmin(request.auth.uid);
     }
 

@@ -395,7 +395,16 @@ window.deleteExpense = function (id) {
 // V3.58 — ترحيل المصروفات الدورية المستحقة إلى الخزينة (صادر) مرة واحدة لكل
 // فترة. يُستدعى بعد أول جلب سحابي شامل (bms-data-synced key='*') وهو idempotent
 // عبر cycleKey + lastPostedPeriod فلا يُدوِّن أي فترة مرتين.
+// V3.70 — الترحيل يكتب في payments (create) و expenses (update)، وقواعد
+// Firestore تسمح بهما لـ admin/accountant فقط. كان الإطلاق يحدث عند أول مزامنة
+// سحابية بعد دخول أي دور، فكتابة كاشير/مخزّن تُرفض ويُلغى الـbatch الذرّي كاملاً
+// (المصروف الدوري لا يُدوَّن). نُقيّد الإطلاق هنا بالدورين المصرّح لهما.
 window.postDueRecurringExpenses = function (nowDate) {
+  const current = (typeof authService.getCurrentUser === 'function')
+    ? authService.getCurrentUser()
+    : null;
+  const role = current ? current.role : null;
+  if (role !== 'admin' && role !== 'accountant') return 0;
   return expenses.postDueRecurringExpenses(dataRepo(), nowDate);
 };
 if (typeof window.addEventListener === 'function') {
