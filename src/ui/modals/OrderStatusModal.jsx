@@ -40,6 +40,7 @@ function OrderStatusModalInner() {
   const [order] = useState(() => (window.getOrderById ? window.getOrderById(orderId) : null))
 
   const deposit = Number(order?.downPayment) || 0
+  const totalAmount = Number(order?.totalAmount) || 0
   const sourceStatus = (order && order.status) || currentStatus || ''
   const allowedTargets = useMemo(() => ORDER_STATUS_TRANSITIONS[sourceStatus] || [], [sourceStatus])
   const canReactivate = sourceStatus === 'cancelled' || sourceStatus === 'returned'
@@ -50,6 +51,9 @@ function OrderStatusModalInner() {
   const [refundAmount, setRefundAmount] = useState(String(deposit))
   const [reactivationAmount, setReactivationAmount] = useState(String(retainedDeposit))
   const [submitting, setSubmitting] = useState(false)
+
+  const reactivationError =
+    canReactivate && totalAmount > 0 && Number(reactivationAmount) > totalAmount
 
   if (!order) {
     return (
@@ -91,6 +95,10 @@ function OrderStatusModalInner() {
     let reactivationDeposit = 0
     if (newStatus === 'new' && reactivationAmount !== '') {
       reactivationDeposit = Number(reactivationAmount) || 0
+      if (reactivationDeposit < 0 || (totalAmount > 0 && reactivationDeposit > totalAmount)) {
+        showToast(`مبلغ العربون عند إعادة التفعيل يجب أن يكون من 0 حتى ${formatCurrency(totalAmount)}`, 'error')
+        return
+      }
     }
 
     setSubmitting(true)
@@ -183,14 +191,21 @@ function OrderStatusModalInner() {
               label="مبلغ العربون المستلم عند إعادة التفعيل"
               type="number"
               min="0"
+              max={totalAmount}
               step="any"
               value={reactivationAmount}
               onChange={setReactivationAmount}
               className="text-sky-400 font-extrabold num-font"
             />
+            {reactivationError ? (
+              <p className="text-[11px] font-bold text-rose-400">
+                ⚠️ مبلغ العربون لا يتجاوز إجمالي الفاتورة {formatCurrency(totalAmount)}
+              </p>
+            ) : null}
             <p className="text-[11px] text-sky-400/80">
               الافتراضي: المحتفظ به من العربون بعد أي استرداد سابق ({formatCurrency(retainedDeposit)}). يُسجَّل
-              المبلغ المكتوب هنا كاستلام فعلي في خزينة العميل عند إعادة التفعيل.
+              المبلغ المكتوب هنا كاستلام فعلي في خزينة العميل عند إعادة التفعيل (بحدّ أقصى إجمالي الفاتورة
+              {' '}{formatCurrency(totalAmount)}).
             </p>
           </div>
         ) : null}

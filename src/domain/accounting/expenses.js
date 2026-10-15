@@ -162,7 +162,15 @@ export function createExpense({ title, amount, category = 'عمومية', date, 
 
 export function updateExpense(id, updates, repo) {
   const sanitized = { ...updates };
-  if (sanitized.amount != null) sanitized.amount = round2(parseFloat(sanitized.amount));
+  // D-EXP-1 — نفس حارس createExpense: منع تخزين مبلغ صفري/سالب/غير رقمي بصمت
+  // عند التعديل (خفض سالب يرفع الربح خطأً، والصفر بلا معنى محاسبي).
+  if (sanitized.amount != null) {
+    const numAmount = round2(parseFloat(sanitized.amount));
+    if (isNaN(numAmount) || numAmount <= 0) {
+      throw new Error('يرجى إدخال قيمة مصروف صحيحة أكبر من الصفر');
+    }
+    sanitized.amount = numAmount;
+  }
   if (sanitized.recurring != null) sanitized.recurring = !!sanitized.recurring;
   if (sanitized.recurring === true) {
     sanitized.dueDay = parseInt(sanitized.dueDay, 10) || null;

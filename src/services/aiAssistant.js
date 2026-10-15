@@ -23,6 +23,15 @@ function toNum(v) {
   return isNaN(n) ? 0 : n
 }
 
+/**
+ * F-09 — هل تُحتسب حالة الطلب ضمن «المبيعات المحقَّقة»؟ الإلغاء/المرتجع لا
+ * يمثّلان بيعاً فعلياً فيُستبعدان من مؤشرات المبيعات والكميات. الطلبات القديمة
+ * بلا حقل حالة تبقى محتسبة (توافقاً مع السلوك السابق).
+ */
+function isCountedSaleStatus(status) {
+  return status == null || status === '' || status === 'delivered' || status === 'completed'
+}
+
 /** المنتجات الناقصة (المخزون ≤ الحد الأدنى) مع كمية مقترحة لإعادة الطلب. */
 export function getLowStockProducts(products = []) {
   return products
@@ -44,7 +53,7 @@ export function getTopCustomers(customers = [], limit = 5) {
 /** أكثر المنتجات مبيعاً حسب الكمية المباعة في الطلبات. */
 export function getTopProducts(orders = [], limit = 5) {
   const counts = {}
-  orders.forEach(o => {
+  orders.filter(o => isCountedSaleStatus(o.status)).forEach(o => {
     ;(o.items || []).forEach(it => {
       const key = it.productName || it.productId || 'غير معروف'
       counts[key] = counts[key] || { name: key, quantity: 0, revenue: 0 }
@@ -75,7 +84,8 @@ export function generateProductDescription(product = {}) {
 /** ملخص يومي سريع لمبيعات اليوم + النواقص + أفضل العملاء/المنتجات. */
 export function buildAiSummary({ products = [], customers = [], orders = [], expenses = [] } = {}) {
   const today = getCairoDate()
-  const todayOrders = orders.filter(o => String(o.createdAt || '').slice(0, 10) === today)
+  // F-09 — مبيعات اليوم = الطلبات المحقَّقة فقط (باستثناء الملغاة/المرتجعة).
+  const todayOrders = orders.filter(o => String(o.createdAt || '').slice(0, 10) === today && isCountedSaleStatus(o.status))
   const todaySales = todayOrders.reduce((sum, o) => sum + toNum(o.totalAmount), 0)
   const todayExpenses = expenses.filter(e => String(e.date || e.createdAt || '').slice(0, 10) === today)
   const todayExpensesTotal = todayExpenses.reduce((sum, e) => sum + toNum(e.amount), 0)

@@ -168,7 +168,7 @@ export const SHEETS = [
     label: 'الخزينة والدفعات',
     idField: 'id',
     editable: ['notes', 'paymentMethod', 'date'],
-    protected: ['amount', 'isDownPayment', 'entityId', 'entityName', 'entityType', 'allocatedToOrders'],
+    protected: ['amount', 'isDownPayment', 'entityId', 'entityName', 'entityType', 'allocatedToOrders', 'allocatedAmount'],
     headers: [
       { key: 'id', label: 'رقم الدفعة (ID)' },
       { key: 'entityType', label: 'نوع الطرف' },
@@ -179,6 +179,7 @@ export const SHEETS = [
       { key: 'paymentMethod', label: 'طريقة الدفع' },
       { key: 'isDownPayment', label: 'عربون' },
       { key: 'allocatedToOrders', label: 'مخصص لسداد الطلبات' },
+      { key: 'allocatedAmount', label: 'المبلغ المخصص لسداد الطلبات' },
       { key: 'notes', label: 'الملاحظات' },
       { key: 'createdAt', label: 'تاريخ الإنشاء' },
       { key: 'syncUpdatedAt', label: 'آخر تحديث Sync' }
@@ -962,6 +963,15 @@ function applyPayment(row, existing) {
     }
     const now = getCairoFormattedDate();
     const createdAt = String(row.createdAt || '').trim() || timeCell(row) || now;
+    // V3.67 / Phase 4.2 (A1) — المبلغ المُخصَّص فعلاً على الطلبات يرافق الدفعة عبر
+    // ورقة Google. غياب الخلية (سجل قديم) يبقي الحقل غير معرَّف فيسقط الاحتساب
+    // على العلامة المنطقية allocatedToOrders دون أي تغيير سلوكي.
+    const allocatedRaw = row.allocatedAmount;
+    let allocatedAmount;
+    if (allocatedRaw !== undefined && allocatedRaw !== null && allocatedRaw !== '') {
+      const n = Number(String(allocatedRaw).replace(/,/g, '').trim());
+      if (!isNaN(n)) allocatedAmount = n;
+    }
     const doc = {
       id,
       entityType,
@@ -978,6 +988,7 @@ function applyPayment(row, existing) {
       updatedAt: timeCell(row) || createdAt,
       syncUpdatedAt: timeCell(row) || createdAt
     };
+    if (allocatedAmount !== undefined) doc.allocatedAmount = allocatedAmount;
     window.addFirestoreDoc(window.STORAGE_KEYS.PAYMENTS, doc);
     const audits = ['SYNC_CREATE دفعة ' + id];
     if (fallbackCreated) audits.push('SYNC_FALLBACK_CREATE ' + entityType + ' ' + entityId + ' (مرجع غير موجود محلياً — أُنشئ احتياطياً)');

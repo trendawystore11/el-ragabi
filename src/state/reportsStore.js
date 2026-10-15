@@ -99,9 +99,15 @@ export function filterOrdersSmart(ordersList, dateFrom = null, dateTo = null, no
  * المقبوضات مقيدة بسقف إجمالي الفاتورة لكل طلب فلا تتضاعف، مردودات الموردين
  * النقدية وارد فعلي، ومدفوعات الموردين تخرج من الصافي. حركات الخزينة المباشرة
  * (مردودات مستردة + تسويات يدوية) تُضاف/تُطرح من الصافي بقيمها الموقّعة.
+ *
+ * F-01 (الخيار أ) — قيد إعادة الاعتماد (recredit) عند إعادة تفعيل طلب ملغي/مرتجع
+ * يُستبعد من الوارد: المبلغ المُحتفظ به محسوبٌ أصلاً في قيد العربون الأصلي، فعدّه
+ * وارداً مرة أخرى يضاعف الكاش ويجعل netTreasury أعلى من النقد الفعلي. يبقى أثره
+ * على دفتر العميل (customer.paid) كما هو لأنه إعادة إرساء رصيد لا استلام نقد جديد.
  */
 export function computeTreasury(payments, orders) {
-  const list = Array.isArray(payments) ? payments : []
+  // F-10 — استبعاد القيود المعكوسة (reversed) فلا تُحتسب في الخزينة بعد عكس فاشل/جزئي.
+  const list = Array.isArray(payments) ? payments.filter(p => p && p.reversed !== true) : []
   const allOrders = Array.isArray(orders) ? orders : []
 
   const ordersById = {}
@@ -109,9 +115,13 @@ export function computeTreasury(payments, orders) {
     ordersById[o.id] = o
   })
 
+  // F-01 (الخيار أ) — قيد إعادة الاعتماد (recredit) لا يدخل الوارد: المُحتفظ به
+  // محسوبٌ أصلاً في قيد العربون الأصلي. يُعرف ببادئة cycleKey الموحّدة 'recredit-'.
+  const isRecreditPayment = p => String(p.cycleKey || '').startsWith('recredit')
+
   const perOrderCollected = {}
   list.forEach(p => {
-    if (p.entityType === 'customer' && (Number(p.amount) || 0) > 0 && p.isDownPayment && p.refOrderId) {
+    if (p.entityType === 'customer' && (Number(p.amount) || 0) > 0 && p.isDownPayment && p.refOrderId && !isRecreditPayment(p)) {
       perOrderCollected[p.refOrderId] = round2((perOrderCollected[p.refOrderId] || 0) + (Number(p.amount) || 0))
     }
   })

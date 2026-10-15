@@ -411,6 +411,61 @@ function handleDepositRefund(order, refundAmount, note, repo) {
 }
 
 /**
+ * F-01 — المبلغ المُعاد اعتماده عند إعادة تفعيل طلب ملغي/مرتجع.
+ * إن أدخل المستخدم مبلغاً صريحاً (> 0) يُعتمد هو؛ وإلا فالقيمة الافتراضية هي
+ * النقد المُحتفظ به فعلاً على الطلب = المقدم الأصلي − المسترد فعلاً. هذا هو
+ * مصدر الحقيقة الوحيد: لا يُفترض تصفير المقدم ولا استخدام قيمة ثابتة.
+ */
+function computeReactivationAmount(order, reactivationDeposit) {
+  const retainedDefault = round2(Math.max(0, (Number(order.downPayment) || 0) - (Number(order.refundedAmount) || 0)));
+  return (Number(reactivationDeposit) > 0) ? round2(Number(reactivationDeposit)) : retainedDefault;
+}
+
+/**
+ * F-01 — مزامنة الحقول المالية للأوردر مع النقد المُحتفظ به قبل أي احتساب لاحق
+ * (توصيل/تسوية). بدونها يبقى downPayment على قيمته القديمة (ما قبل الاسترداد)
+ * فيُحتسب المتبقي من أساس خاطئ وتتفاقم الفجوة مع الدفتر المالي (customer.paid).
+ * يُعيد المبلغ المُزامن للاستخدام في قيد إعادة الاعتماد.
+ */
+function syncReactivationMoney(order, wRepo, orderId, reCreditAmount) {
+  const total = Number(order.totalAmount) || 0;
+  const remaining = round2(Math.max(0, total - reCreditAmount));
+  const paidInFull = remaining <= 0;
+  order.downPayment = reCreditAmount;
+  order.remainingBalance = remaining;
+  order.paidInFull = paidInFull;
+  wRepo.updateFirestoreDoc(wRepo.storageKeys.ORDERS, orderId, {
+    downPayment: reCreditAmount,
+    remainingBalance: remaining,
+    paidInFull
+  });
+  return reCreditAmount;
+}
+
+/**
+ * F-01/V3.15.2 — يُسجّل قيد إعادة الاعتماد (recredit) بقيمة النقد المُحتفظ به
+ * المكتوب فعلاً. لا يُنشئ قيداً إن كان المبلغ صفراً (استرداد كامل) تجنّباً لخلق
+ * نقد وهمي أو احتساب المبلغ القديم مرتين.
+ */
+function recordReactivationRecredit(order, wRepo, reCreditAmount) {
+  if (!(reCreditAmount > 0)) return;
+  wRepo.createPaymentRecord({
+    entityType: 'customer',
+    entityId: order.customerId,
+    entityName: order.customerName,
+    amount: reCreditAmount,
+    date: getCairoFormattedDate().slice(0, 10),
+    paymentMethod: 'cash',
+    isDownPayment: true,
+    notes: `إعادة تسجيل دفعة / رد مبلغ للطلب رقم ${order.id} بعد إعادة تفعيله`,
+    type: 'deposit',
+    refOrderId: order.id,
+    cycleKey: 'recredit-' + reCreditAmount,
+    createdBy: 'المدير العام'
+  });
+}
+
+/**
  * V3.15.2 — Order Status update with the state-machine guard (rejects illegal
  * transitions BEFORE any write) and all reversal/re-fulfillment side effects.
  */
@@ -462,47 +517,22 @@ export async function updateOrderStatus(orderId, newStatus, refundAmount, reacti
   }
 
   // V3.15.2 — Reactivate a cancelled/returned order: back to "جديد".
+  // F-01 — نزامن downPayment/remainingBalance على النقد المُحتفظ به (المقدم −
+  // المسترد) قبل أي احتساب لاحق، ثم نسجّل قيد إعادة الاعتماد.
   if ((oldStatus === 'cancelled' || oldStatus === 'returned') && newStatus === 'new') {
-    const retainedDefault = round2(Math.max(0, (Number(currentOrder.downPayment) || 0) - (Number(currentOrder.refundedAmount) || 0)));
-    const reCreditAmount = (Number(reactivationDeposit) > 0) ? round2(Number(reactivationDeposit)) : retainedDefault;
-    if (reCreditAmount > 0) {
-      wRepo.createPaymentRecord({
-        entityType: 'customer',
-        entityId: currentOrder.customerId,
-        entityName: currentOrder.customerName,
-        amount: reCreditAmount,
-        date: getCairoFormattedDate().slice(0, 10),
-        paymentMethod: 'cash',
-        isDownPayment: true,
-        notes: `إعادة تسجيل دفعة / رد مبلغ للطلب رقم ${currentOrder.id} بعد إعادة تفعيله`,
-        type: 'deposit',
-        refOrderId: currentOrder.id,
-        cycleKey: 'recredit-' + reCreditAmount,
-        createdBy: 'المدير العام'
-      });
-    }
+    const reCreditAmount = computeReactivationAmount(currentOrder, reactivationDeposit);
+    syncReactivationMoney(currentOrder, wRepo, orderId, reCreditAmount);
+    recordReactivationRecredit(currentOrder, wRepo, reCreditAmount);
   }
 
   // 3. Cancelled/Returned → Delivered/Completed: Re-fulfill order and decrement stock
+  // F-01 — المزامنة BEFORE applyOrderFulfillment كي يُحتسب المتبقي على النقد
+  // المُحتفظ به لا على المقدم القديم.
   if ((oldStatus === 'returned' || oldStatus === 'cancelled') && (newStatus === 'delivered' || newStatus === 'completed')) {
+    const reCreditAmount = computeReactivationAmount(currentOrder, 0);
+    syncReactivationMoney(currentOrder, wRepo, orderId, reCreditAmount);
     applyOrderFulfillment(currentOrder, wRepo);
-    const reCreditAmount = round2(Math.max(0, (Number(currentOrder.downPayment) || 0) - (Number(currentOrder.refundedAmount) || 0)));
-    if (reCreditAmount > 0) {
-      wRepo.createPaymentRecord({
-        entityType: 'customer',
-        entityId: currentOrder.customerId,
-        entityName: currentOrder.customerName,
-        amount: reCreditAmount,
-        date: getCairoFormattedDate().slice(0, 10),
-        paymentMethod: 'cash',
-        isDownPayment: true,
-        notes: `إعادة تسجيل دفعة / رد مبلغ للطلب رقم ${currentOrder.id} بعد إعادة تفعيله`,
-        type: 'deposit',
-        refOrderId: currentOrder.id,
-        cycleKey: 'recredit-' + reCreditAmount,
-        createdBy: 'المدير العام'
-      });
-    }
+    recordReactivationRecredit(currentOrder, wRepo, reCreditAmount);
   }
 
   // 2. Delivered/Completed → Returned/Cancelled: Revert Stock & Cancel Customer Debt
@@ -613,6 +643,15 @@ export async function updateOrderStatus(orderId, newStatus, refundAmount, reacti
               createdBy: 'المدير العام'
             });
           }
+          // F-03 — الاسترداد التلقائي كان يُصدر قيد رد دون توثيقه على الطلب، بخلاف
+          // مسار الاسترداد الصريح (handleDepositRefund). نسجّل refundedAmount/
+          // retainedDeposit هنا أيضاً كي لا يُعاد اعتماد الاسترداد مرتين عند إعادة
+          // التفعيل وتظل القوائم المالية متسقة مع ما رُدَّ فعلاً.
+          const autoDeposit = Number(currentOrder.downPayment) || 0;
+          wRepo.updateFirestoreDoc(repo.storageKeys.ORDERS, orderId, {
+            refundedAmount: autoRefund,
+            retainedDeposit: round2(Math.max(0, autoDeposit - autoRefund))
+          });
         }
       }
     }
@@ -650,6 +689,14 @@ export async function updateOrderStatus(orderId, newStatus, refundAmount, reacti
 
       wRepo.recalculateCustomerBalance(currentOrder.customerId);
     }
+  }
+
+  // V3.16.4 — بعد التوصيل/الإتمام يُعاد احتساب دفتر العميل من المصادر. ضروري بعد
+  // إصلاح عدم تقييد الطلبات pending: إن أُعيد احتساب الرصيد أثناء حالة pending
+  // (كما يحدث عند بدء الجلسة) يُصفَّر paid (العربون pending غير مُقيَّد)، وهذه
+  // الإعادة تُعيده من order.downPayment عند التوصيل/الإتمام بلا انتظار جلسة تالية.
+  if (newStatus === 'delivered' || newStatus === 'completed') {
+    wRepo.recalculateCustomerBalance(currentOrder.customerId);
   }
 
   if (batch) {

@@ -234,11 +234,19 @@ export function addStockShipment(productId, addedQty, supplierId = '', unitPurch
   if (extrasTotal < 0) throw new Error('قيمة مصاريف الشحن/النسريات غير صالحة');
 
   const updatePayload = {
-    stock: newStock,
+    // F-06 — كتابة المخزون تراكمية ذرّية (increment) لا قيمة مطلقة: شحنة قرأت
+    // الرصيد قديماً ثم تكتب قيمة مطلقة تطمس بيعاً متزامناً حدث بين القراءة
+    // والكتابة. increment يطبّقه الخادم فلا يضيع البيع (10 + 5 − 3 = 12).
+    stock: increment(qty),
     updatedAt: getCairoFormattedDate()
   };
 
   const purPrice = Number(unitPurchasePrice);
+  // D-INV-1 — سعر شراء سالب كان يُتجاهَل بصمت (تُتخطّى كتلة المزج ويُركن
+  // لسعر التكلفة القديم) فيمرّ الإدخال الخاطئ بلا رفض. نرفضه صراحةً.
+  if (!isNaN(purPrice) && purPrice < 0) {
+    throw new Error('يرجى إدخال سعر شراء صحيح (0 أو أكثر)');
+  }
   const oldPurchasePrice = Number(product.purchasePrice) || 0;
 
   // F3 — COGS split: new unit cost = weighted average of (old stock cost +
@@ -373,7 +381,6 @@ export function editStockShipment(txnId, changes, repo, editedBy = '') {
   }
   if (oldUnitCost === null) oldUnitCost = round2(oldDebit / oldQty);
 
-  const oldGoodsValue = round2(oldQty * oldUnitCost);
   const deltaQty = newQty - oldQty;
 
   const currentStock = Number(product.stock) || 0;
@@ -385,8 +392,14 @@ export function editStockShipment(txnId, changes, repo, editedBy = '') {
   const newDebit = round2(newQty * newUnitCost);
   const debtDelta = round2(newDebit - oldDebit);
 
+  // D-INV-2 — إعادة المزج على «نصيب الوحدات المتبقية» فقط: الوحدات التي بيعت
+  // خرجت من المخزون بتكلفتها القديمة أصلاً، فطرح قيمة الشحنة كاملةً
+  // (oldQty×oldUnitCost) كان يهبط بالمتوسط إلى الصفر أو ينفخه. نطرح/نضيف نصيب
+  // ما تبقّى فعلاً في المخزون من الشحنة (القديمة والجديدة على التوالي).
   const oldPrice = Number(product.purchasePrice) || 0;
-  const totalCost = (currentStock * oldPrice) - oldGoodsValue + newDebit;
+  const remainingOldShare = Math.min(currentStock, oldQty);
+  const remainingNewShare = Math.min(newStock, newQty);
+  const totalCost = (currentStock * oldPrice) - (remainingOldShare * oldUnitCost) + (remainingNewShare * newUnitCost);
   const newAvg = newStock > 0 ? Math.max(0, round2(totalCost / newStock)) : 0;
 
   const stamp = getCairoFormattedDate();
@@ -405,12 +418,14 @@ export function editStockShipment(txnId, changes, repo, editedBy = '') {
 
   const batch = (typeof repo.createWriteBatch === 'function') ? repo.createWriteBatch() : null;
   if (batch) {
-    batch.update(repo.storageKeys.PRODUCTS, product.id, { stock: newStock, purchasePrice: newAvg, updatedAt: stamp });
+    // F-06 — كتابة المخزون تراكمية ذرّية (increment deltaQty) لا قيمة مطلقة:
+    // تعديل قرأ الرصيد ثم كتب قيمة مطلقة يطمس أثر بيع/شحنة متزامنة بين القراءة والكتابة.
+    batch.update(repo.storageKeys.PRODUCTS, product.id, { stock: increment(deltaQty), purchasePrice: newAvg, updatedAt: stamp });
     batch.update(repo.storageKeys.SUPPLIER_TRANSACTIONS, txn.id, txnPayload);
     if (supplierPayload) batch.update(repo.storageKeys.SUPPLIERS, txn.supplierId, supplierPayload);
     batch.commit();
   } else {
-    repo.updateFirestoreDoc(repo.storageKeys.PRODUCTS, product.id, { stock: newStock, purchasePrice: newAvg, updatedAt: stamp });
+    repo.updateFirestoreDoc(repo.storageKeys.PRODUCTS, product.id, { stock: increment(deltaQty), purchasePrice: newAvg, updatedAt: stamp });
     repo.updateFirestoreDoc(repo.storageKeys.SUPPLIER_TRANSACTIONS, txn.id, txnPayload);
     if (supplierPayload) repo.updateSupplier(txn.supplierId, supplierPayload);
   }

@@ -6,6 +6,7 @@
  */
 import { toNumber, round2, formatCurrency, generateAutoId, getCairoFormattedDate, increment } from '../../utils/formatters.js';
 import { isActiveOrderStatus, getOrderRemainingAmount } from './accounting.js';
+import { getUnappliedPaymentAmount } from '../customers/customers.js';
 
 /** V3.15 — Explicit mandatory ordering for the treasury ledger. */
 export function sortPaymentsDesc(list) {
@@ -39,8 +40,9 @@ export function getPaymentsByEntity(payments, entityType, entityId) {
 
 /** V3.65 — Net customer debt-adjustment total (a positive entry reduces debt). */
 export function getCustomerDebtAdjustmentsTotal(payments) {
+  // F-10 — الدفعات المعكوسة (reversed) بلا أثر مالي ⇒ تُستبعد من الإجماليات.
   return round2((payments || [])
-    .filter(p => p.type === 'customerDebtAdjustment')
+    .filter(p => p.type === 'customerDebtAdjustment' && p.reversed !== true)
     .reduce((sum, p) => sum + toNumber(p.amount), 0));
 }
 
@@ -48,10 +50,18 @@ export function getTotalCustomerReceivables(orders, payments = []) {
   // V3.16 — Receivables derived DIRECTLY from ACTIVE orders.
   // V3.65 — Subtract customer debt adjustments (a positive entry reduces the
   // debt) so the dashboard/report figures stay consistent with the statements.
+  const list = (payments || []).filter(p => p.reversed !== true);
   const base = orders
     .filter(o => isActiveOrderStatus(o.status))
     .reduce((sum, o) => sum + getOrderRemainingAmount(o), 0);
-  return round2(base - getCustomerDebtAdjustmentsTotal(payments));
+  // دفعات/ائتمان العميل غير المُخصَّص لطلب (تحصيل بلا طلب نشط) تخفض الدين فعلاً
+  // في دفتر العميل، لكن المؤشر كان يتجاهلها فيبالغ في الذمم (500 بدل 300).
+  // نستخدم نفس دلالة recalculateCustomerBalance (getUnappliedPaymentAmount) كي
+  // يتطابق مؤشر الذمم مع صافي أرصدة العملاء.
+  const unappliedCustomerCredit = round2(list
+    .filter(p => p.entityType === 'customer' && p.type !== 'customerDebtAdjustment' && !p.isDownPayment && toNumber(p.amount) > 0)
+    .reduce((sum, p) => sum + getUnappliedPaymentAmount(p), 0));
+  return round2(base - getCustomerDebtAdjustmentsTotal(list) - unappliedCustomerCredit);
 }
 
 export function getTotalSupplierPayables(suppliers) {
@@ -59,7 +69,8 @@ export function getTotalSupplierPayables(suppliers) {
 }
 
 export function getTotalPaymentsCollected(payments) {
-  return round2((payments || []).reduce((sum, p) => sum + toNumber(p.amount), 0));
+  // F-10 — استبعاد القيود المعكوسة من إجمالي المقبوضات.
+  return round2((payments || []).filter(p => p.reversed !== true).reduce((sum, p) => sum + toNumber(p.amount), 0));
 }
 
 /**
@@ -198,6 +209,14 @@ export function createPaymentRecord({ entityType, entityId, entityName, amount, 
           .filter(o => o.customerId === entityId && o.status !== 'returned' && o.status !== 'cancelled' && (Number(o.remainingBalance) || 0) > 0)
           .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
         let remainingToAllocate = numericAmount;
+        // Phase 4 / F-05B — نتبّع المبلغ المُخصَّص فعلاً على الطلبات؛ فقد يقلّ عن
+        // قيمة الدفعة (تخصيص جزئي) أو يكون صفراً (لا طلبات مؤهّلة). بغير ذلك تفنى
+        // الدفعة أو بقيّتها غير المُخصَّصة عند إعادة احتساب رصيد العميل.
+        // F-05 — نحفظ التخصيص الأصلي بالتفصيل (orderId + amount) وقت الإنشاء كي
+        // يعكس العكسُ الطلبات التي خُصّصت لها فعلاً، لا «أحدث الطلبات المسدَّدة» عند
+        // العكس. ترتيب الطلبات قد يتغيّر بين الإنشاء والعكس فيُفسد التوزيع.
+        let totalAllocated = 0;
+        const allocations = [];
         for (const order of unpaidOrders) {
           if (remainingToAllocate <= 0) break;
           const orderRemaining = Number(order.remainingBalance) || 0;
@@ -209,10 +228,18 @@ export function createPaymentRecord({ entityType, entityId, entityName, amount, 
             remainingBalance: newRemaining,
             paidInFull: newRemaining <= 0
           });
-          remainingToAllocate -= allocated;
+          if (allocated > 0) allocations.push({ orderId: order.id, amount: allocated });
+          remainingToAllocate = round2(remainingToAllocate - allocated);
+          totalAllocated = round2(totalAllocated + allocated);
         }
+        // allocatedToOrders = هل خُصّص أي جزء للطلبات (توافقاً مع دلالة الحقل
+        // التاريخية)، وallocatedAmount = المبلغ المُخصَّص فعلاً (لتمثيل التخصيص
+        // الجزئي الذي لا تكفيه العلامة المنطقية وحدها)، وallocations = التوزيع
+        // الأصلي بالتفصيل الذي يعتمد عليه العكس (F-05).
         repo.updateFirestoreDoc(repo.storageKeys.PAYMENTS, paymentId, {
-          allocatedToOrders: true
+          allocatedToOrders: totalAllocated > 0,
+          allocatedAmount: totalAllocated,
+          allocations
         });
       }
     }
@@ -287,6 +314,16 @@ export function reversePaymentRecord(paymentId, repo) {
     throw new Error('لا يمكن عكس/حذف دفعة مرتبطة بفاتورة — عدّل الفاتورة أو حالتها بدلاً من ذلك');
   }
 
+  // F-10 — idempotency: إعادة المحاولة بعد نجاح جزئي يجب ألا تعكس الأثر مرتين.
+  // إن كان القيد مُعلَّماً بالعكس مسبقاً لا نعيد تطبيق أي أثر.
+  if (payment.reversed === true) return payment;
+
+  // F-10 — durable reversal marker: يُكتب قبل أي أثر مالي، فلو فشل العكس في منتصفه
+  // (أو فشل الحذف التالي) يبقى القيد موسوماً، وتتجاهله محركات الاشتقاق
+  // (recalculateCustomerBalance/computeTreasury) فيصبح بلا أثر مالي — بدل أن
+  // يُحتسب مرتين. الحقل اختياري ومتوافق مع السجلات القديمة (الغائب = غير معكوس).
+  repo.updateFirestoreDoc(repo.storageKeys.PAYMENTS, paymentId, { reversed: true });
+
   const numericAmount = round2(Number(payment.amount) || 0);
   const isSupplierCollection = payment.entityType === 'supplier' && payment.type === 'supplierCollection';
 
@@ -302,15 +339,41 @@ export function reversePaymentRecord(paymentId, repo) {
         remainingBalance: increment(-balanceDelta)
       });
 
-      // إلغاء تخصيص الدفعة على الطلبات: نُرجع المبلغ لأحدث الطلبات المسدَّدة أولاً.
-      if (!payment.isDownPayment && numericAmount > 0 && payment.allocatedToOrders) {
+      // إلغاء تخصيص الدفعة على الطلبات (F-05):
+      //   • السجلات الحديثة تحمل التوزيع الأصلي (payment.allocations) فنعكسه على
+      //     الطلبات نفسها التي خُصّصت لها فعلاً — لا استنتاجاً من ترتيب الطلبات
+      //     الحالي (الذي قد يتغيّر بين الإنشاء والعكس فيُفسد أرصدة العملاء).
+      //   • السجلات القديمة بلا allocations: نسقط على allocatedAmount/العلامة
+      //     المنطقية ونعيد لأحدث الطلبات المسدَّدة أولاً (توافقاً مع السلوك السابق).
+      const allocations = Array.isArray(payment.allocations) ? payment.allocations : null;
+      const allocatedToReverse = payment.allocatedAmount != null
+        ? round2(Math.max(0, toNumber(payment.allocatedAmount)))
+        : (payment.allocatedToOrders ? numericAmount : 0);
+      if (!payment.isDownPayment && allocations && allocations.length > 0) {
+        const ordersById = new Map(repo.getOrders().map(o => [o.id, o]));
+        for (const alloc of allocations) {
+          const order = ordersById.get(alloc.orderId);
+          if (!order) continue;
+          const amount = round2(Math.max(0, toNumber(alloc.amount)));
+          if (amount <= 0) continue;
+          const orderDownPayment = Number(order.downPayment) || 0;
+          const removed = round2(Math.min(amount, orderDownPayment));
+          const newDownPayment = round2(orderDownPayment - removed);
+          const newRemaining = round2((Number(order.remainingBalance) || 0) + removed);
+          repo.updateFirestoreDoc(repo.storageKeys.ORDERS, order.id, {
+            downPayment: newDownPayment,
+            remainingBalance: newRemaining,
+            paidInFull: newRemaining <= 0
+          });
+        }
+      } else if (!payment.isDownPayment && allocatedToReverse > 0) {
         const orders = repo.getOrders();
         const paidOrders = orders
           .filter(o => o.customerId === payment.entityId
             && o.status !== 'returned' && o.status !== 'cancelled'
             && (Number(o.downPayment) || 0) > 0)
           .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-        let remainingToRemove = numericAmount;
+        let remainingToRemove = allocatedToReverse;
         for (const order of paidOrders) {
           if (remainingToRemove <= 0) break;
           const orderDownPayment = Number(order.downPayment) || 0;
@@ -357,11 +420,45 @@ export function reversePaymentRecord(paymentId, repo) {
 /**
  * deletePaymentRecord — يحذف قيد دفعة مستقلة بعد عكس أثره المالي.
  * يُرفض للدفعات المرتبطة بفاتورة. يعيد قيد الدفعة المحذوف.
+ *
+ * F-10 — الذرّية: عندما تدعم طبقة التخزين الدفعات الذرّية
+ * (repo.createWriteBatch/withBatch، كما في dataRepo()) يُنفَّذ العكس + الحذف داخل
+ * WriteBatch واحد فيلتزمان معاً أو لا. عند غياب الدعم (fallback) يُعتمد على علامة
+ * العكس الدائمة: فشل الحذف يترك قيداً موسوماً بلا أثر مالي (تتجاهله محركات
+ * الاشتقاق)، وإعادة المحاولة آمنة لأن العكس idempotent.
  */
 export async function deletePaymentRecord(paymentId, repo) {
-  const payment = reversePaymentRecord(paymentId, repo);
-  await repo.deleteFirestoreDoc(repo.storageKeys.PAYMENTS, paymentId);
+  const batch = (typeof repo.createWriteBatch === 'function') ? repo.createWriteBatch() : null;
+  const wRepo = batch ? repo.withBatch(batch) : repo;
+  const payment = reversePaymentRecord(paymentId, wRepo);
+  await wRepo.deleteFirestoreDoc(repo.storageKeys.PAYMENTS, paymentId);
+  if (batch) await batch.commit();
   return payment;
+}
+
+/**
+ * F-10 — recovery helper: يُعيد إنشاء قيد الدفعة الأصلي بنفس المعرّف بعد فشل
+ * مسار التعديل (عكس + حذف) قبل إتمام الإبدال. الحقول مُشتقّة من الأرشيف (`old`)،
+ * والسجلات القديمة بلا حقول حديثة تبقى قابلة للاسترداد. يُستخدم فقط عند الفشل.
+ */
+function restorePaymentRecord(old, paymentId, repo) {
+  const isSupplierCollection = old.entityType === 'supplier' && old.type === 'supplierCollection';
+  const stored = Number(old.amount) || 0;
+  return createPaymentRecord({
+    entityType: old.entityType,
+    entityId: old.entityId,
+    entityName: old.entityName,
+    amount: isSupplierCollection ? Math.abs(stored) : stored,
+    date: old.date,
+    paymentMethod: old.paymentMethod,
+    notes: old.notes,
+    isDownPayment: !!old.isDownPayment,
+    createdBy: old.createdBy,
+    type: old.type,
+    isCollection: isSupplierCollection,
+    id: paymentId,
+    createdAt: old.createdAt
+  }, repo);
 }
 
 /**
@@ -370,6 +467,10 @@ export async function deletePaymentRecord(paymentId, repo) {
  *   1) يعكس الأثر القديم ويحذف المستند القديم.
  *   2) يُنشئ القيد من جديد عبر createPaymentRecord بمعرّف مثبّت.
  * يُرفض للدفعات المرتبطة بفاتورة. يعيد القيد الجديد.
+ *
+ * F-10 — الذرّية والاسترداد: عند دعم الدفعات الذرّية تُنفَّذ العكس+الحذف+الإبدال
+ * داخل WriteBatch واحد (وإلا فعلى التسلسل مع علامة العكس الدائمة). إن فشل الإبدال
+ * بعد العكس/الحذف يُستردّ السجل الأصلي فلا تُفقد الدفعة.
  */
 export async function updatePaymentRecord(paymentId, changes, repo) {
   const old = repo.getPayments().find(p => p.id === paymentId);
@@ -388,28 +489,42 @@ export async function updatePaymentRecord(paymentId, changes, repo) {
   const numericAmount = round2(parseFloat(rawAmount));
   if (isNaN(numericAmount) || numericAmount === 0) throw new Error('يرجى إدخال مبلغ صحيح');
 
-  reversePaymentRecord(paymentId, repo);
-  await repo.deleteFirestoreDoc(repo.storageKeys.PAYMENTS, paymentId);
+  // F-10 — WriteBatch ذرّي واحد للعكس + الحذف + الإبدال (fallback: تسلسل مباشر).
+  const batch = (typeof repo.createWriteBatch === 'function') ? repo.createWriteBatch() : null;
+  const wRepo = batch ? repo.withBatch(batch) : repo;
+
+  reversePaymentRecord(paymentId, wRepo);
+  await wRepo.deleteFirestoreDoc(repo.storageKeys.PAYMENTS, paymentId);
 
   // createPaymentRecord يتوقع المبلغ «المنطقي»: موجب لوضع تحصيل المورد
   // (ثم يخزّنه سالباً)، وبإشارته الفعلية لبقية الأنواع (استرداد = سالب).
   const createAmount = isSupplierCollection ? Math.abs(numericAmount) : numericAmount;
 
-  const created = createPaymentRecord({
-    entityType: old.entityType,
-    entityId: old.entityId,
-    entityName: old.entityName,
-    amount: createAmount,
-    date: (changes && changes.date) || old.date,
-    paymentMethod: (changes && changes.paymentMethod) || old.paymentMethod,
-    notes: changes && changes.notes !== undefined ? changes.notes : old.notes,
-    isDownPayment: !!old.isDownPayment,
-    createdBy: old.createdBy,
-    type: nextType,
-    isCollection: isSupplierCollection,
-    id: paymentId,
-    createdAt: old.createdAt
-  }, repo);
+  let created;
+  try {
+    created = createPaymentRecord({
+      entityType: old.entityType,
+      entityId: old.entityId,
+      entityName: old.entityName,
+      amount: createAmount,
+      date: (changes && changes.date) || old.date,
+      paymentMethod: (changes && changes.paymentMethod) || old.paymentMethod,
+      notes: changes && changes.notes !== undefined ? changes.notes : old.notes,
+      isDownPayment: !!old.isDownPayment,
+      createdBy: old.createdBy,
+      type: nextType,
+      isCollection: isSupplierCollection,
+      id: paymentId,
+      createdAt: old.createdAt
+    }, wRepo);
+  } catch (err) {
+    // F-10 — فشل الإبدال: العكس أعلاه دائم بالفعل فلا يجوز ضياع القيد. نستردّ
+    // السجل الأصلي ثم نُثبّت الدفعة (ذرّياً إن أمكن) ونعيد رمي الخطأ للمتصل.
+    restorePaymentRecord(old, paymentId, wRepo);
+    if (batch) await batch.commit();
+    throw err;
+  }
 
+  if (batch) await batch.commit();
   return created;
 }

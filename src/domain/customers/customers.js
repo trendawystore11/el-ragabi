@@ -7,6 +7,7 @@ import { normalizePhone } from '../../utils/phones.js';
 import { round2, toNumber, generateAutoId, formatCurrency } from '../../utils/formatters.js';
 import { getCairoFormattedDate } from '../../utils/formatters.js';
 import { DEFAULT_CUSTOMER_CATEGORY } from './customerRules.js';
+import { isFulfilledOrderStatus } from '../accounting/accounting.js';
 
 /* ===================== pure query helpers ===================== */
 
@@ -200,18 +201,42 @@ export function removeCustomerAddress(customerId, addressId, repo) {
 
 /* ===================== audit & recalculation engine ===================== */
 
+/**
+ * Phase 4 / F-05B — المبلغ غير المُخصَّص لطلب من دفعة مستقلة موجبة.
+ * الدفعات الجديدة تحمل `allocatedAmount` (المبلغ المُخصَّص فعلاً، وقد يكون
+ * صفراً)، فيُحتسب الباقي فقط كدفعة مباشرة. السجلات التاريخية تفتقد الحقل
+ * فنسقط على العلامة المنطقية `allocatedToOrders` (true = مُخصَّص كاملاً).
+ * يُستدعى بعد استبعاد التسويات والدفعات المقدَّمة والقيم غير الموجبة.
+ */
+export function getUnappliedPaymentAmount(payment) {
+  const amount = toNumber(payment.amount);
+  if (payment.allocatedAmount != null) {
+    return round2(Math.max(0, amount - toNumber(payment.allocatedAmount)));
+  }
+  return payment.allocatedToOrders ? 0 : amount;
+}
+
 export function recalculateCustomerBalance(customerId, repo) {
   const customer = getCustomerById(repo.getCustomers(), customerId);
   if (!customer) return;
-  const orders = repo.getOrders().filter(o => o.customerId === customerId && o.status !== 'returned' && o.status !== 'cancelled');
-  const payments = repo.getPaymentsByEntity('customer', customerId);
+  // V3.16.4 — الرصيد الدفتري المخزَّن يُحتسب من الطلبات **المُسلَّمة/المكتملة** فقط،
+  // مطابقةً لدفتر الأحداث (applyOrderFulfillment يزيد المشتريات عند التوصيل/الإتمام
+  // فقط). الطلبات «قيد الانتظار» (new) لا تُقيَّد في الرصيد المخزَّن (انظر
+  // statements.js:42-47) وتبقى في كشف الحساب مع سطر تسوية افتتاحي؛ بغير ذلك تتباعد
+  // إعادة البناء عن دفتر الأحداث عند طلب pending (F-01). حقل paid يبقى استثناءً
+  // موثّقاً (يُحدَّث تراكمياً) لذا لا يتحقق منه expectCustomerLedgerTies.
+  const orders = repo.getOrders().filter(o => o.customerId === customerId && isFulfilledOrderStatus(o.status));
+  // F-10 — استبعاد الدفعات المعكوسة (reversed) فلا تُحتسب مرتين بعد عكس جزئي/فاشل.
+  const payments = repo.getPaymentsByEntity('customer', customerId).filter(p => p.reversed !== true);
 
   const totalPurchases = round2(orders.reduce((sum, o) => sum + toNumber(o.totalAmount), 0));
   const totalDownPayments = round2(orders.reduce((sum, o) => sum + toNumber(o.downPayment), 0));
   // V3.65 — التسويات اليدوية للمديونية (customerDebtAdjustment) قيود دفترية
   // موقّعة تُحتسب في «المسدد» (سالب = زيادة المديونية). تُستثنى من الدفعات
   // المباشرة حتى لا تُحتسب مرتين، فتصمد أمام أي إعادة احتساب.
-  const totalDirectPayments = round2(payments.filter(p => p.type !== 'customerDebtAdjustment' && !p.isDownPayment && !p.allocatedToOrders && toNumber(p.amount) > 0).reduce((sum, p) => sum + toNumber(p.amount), 0));
+  const totalDirectPayments = round2(payments
+    .filter(p => p.type !== 'customerDebtAdjustment' && !p.isDownPayment && toNumber(p.amount) > 0)
+    .reduce((sum, p) => sum + getUnappliedPaymentAmount(p), 0));
   const totalAdjustments = round2(payments.filter(p => p.type === 'customerDebtAdjustment').reduce((sum, p) => sum + toNumber(p.amount), 0));
 
   const totalPaid = round2(totalDownPayments + totalDirectPayments + totalAdjustments);
@@ -265,11 +290,14 @@ export function adjustCustomerDebt(customerId, { remainingBalance, createdBy = '
 
   const targetRemaining = round2(Math.max(0, Number(remainingBalance) || 0));
 
-  const orders = repo.getOrders().filter(o => o.customerId === customerId && o.status !== 'returned' && o.status !== 'cancelled');
+  const orders = repo.getOrders().filter(o => o.customerId === customerId && isFulfilledOrderStatus(o.status));
   const totalPurchases = round2(orders.reduce((sum, o) => sum + toNumber(o.totalAmount), 0));
   const totalDownPayments = round2(orders.reduce((sum, o) => sum + toNumber(o.downPayment), 0));
-  const payments = repo.getPaymentsByEntity('customer', customerId);
-  const totalDirectPayments = round2(payments.filter(p => p.type !== 'customerDebtAdjustment' && !p.isDownPayment && !p.allocatedToOrders && toNumber(p.amount) > 0).reduce((sum, p) => sum + toNumber(p.amount), 0));
+  // F-10 — استبعاد الدفعات المعكوسة من حساب التسويات القائمة.
+  const payments = repo.getPaymentsByEntity('customer', customerId).filter(p => p.reversed !== true);
+  const totalDirectPayments = round2(payments
+    .filter(p => p.type !== 'customerDebtAdjustment' && !p.isDownPayment && toNumber(p.amount) > 0)
+    .reduce((sum, p) => sum + getUnappliedPaymentAmount(p), 0));
   const existingAdjustments = round2(payments.filter(p => p.type === 'customerDebtAdjustment').reduce((sum, p) => sum + toNumber(p.amount), 0));
 
   const basePaid = round2(totalDownPayments + totalDirectPayments);
