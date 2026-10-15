@@ -161,9 +161,10 @@ describe('Dashboard (ui/views/Dashboard.jsx)', () => {
     const { host, unmount } = mount(<Dashboard />)
     const rows = host.querySelectorAll('tbody tr')
     expect(rows.length).toBeGreaterThanOrEqual(4)
-    expect(rows[0].textContent).toContain('ORD-001')
-    expect(rows[0].textContent).toContain('أحمد محمد')
-    expect(rows[0].textContent).toContain('تم التوصيل')
+    // الأحدث أولاً: ORD-004 (2026-01-04) ثم تنازلياً
+    expect(rows[0].textContent).toContain('ORD-004')
+    expect(rows[0].textContent).toContain('ليلى إبراهيم')
+    expect(rows[0].textContent).toContain('مكتمل')
     unmount()
   })
 

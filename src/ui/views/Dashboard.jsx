@@ -82,7 +82,11 @@ function computeStats() {
     lowStockCount: getLowStockProducts(products).length,
     pendingCount: pendingOrders.length,
     pendingCollectedDeposits,
-    recentOrders: orders.slice(0, 5),
+    recentOrders: [...orders].sort((a, b) => {
+      const ta = (a && (a.createdAt || a.date)) || ''
+      const tb = (b && (b.createdAt || b.date)) || ''
+      return String(tb).localeCompare(String(ta), undefined, { numeric: true })
+    }).slice(0, 5),
   }
 }
 

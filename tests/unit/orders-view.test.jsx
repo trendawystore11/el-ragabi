@@ -81,14 +81,18 @@ describe('OrdersView (ui/views/OrdersView.jsx)', () => {
     const rows = rowsOf(host)
     expect(rows).toHaveLength(3)
 
-    expect(rows[0].textContent).toContain('ORD-001')
-    expect(rows[0].textContent).toContain('أحمد محمد')
-    expect(rows[0].textContent).toContain('قيد الانتظار')
-    expect(rows[0].textContent).toContain('عربون الشحن')
+    // الترتيب الجديد: الأحدث ← الأقدم (ORD-003 ثم ORD-002 ثم ORD-001)
+    expect(rows[0].textContent).toContain('ORD-003')
+    expect(rows[0].textContent).toContain('محمود حسن')
+    expect(rows[0].textContent).toContain('مرتجع')
+    expect(rows[0].textContent).toContain('عربون شحن + مصروفات')
+    expect(rows[1].textContent).toContain('ORD-002')
     expect(rows[1].textContent).toContain('مكتمل')
     expect(rows[1].textContent).toContain('عربون عادي')
-    expect(rows[2].textContent).toContain('مرتجع')
-    expect(rows[2].textContent).toContain('عربون شحن + مصروفات')
+    expect(rows[2].textContent).toContain('ORD-001')
+    expect(rows[2].textContent).toContain('أحمد محمد')
+    expect(rows[2].textContent).toContain('قيد الانتظار')
+    expect(rows[2].textContent).toContain('عربون الشحن')
     unmount()
   })
 
@@ -134,17 +138,34 @@ describe('OrdersView (ui/views/OrdersView.jsx)', () => {
     unmount()
   })
 
+  it('فلتر التاريخ (من/إلى) يحدّ النتائج بالنطاق', () => {
+    const { host, unmount } = mount(<OrdersView />)
+    const inputs = host.querySelectorAll('input')
+    // الحقل 0 = البحث، 1 = من تاريخ، 2 = إلى تاريخ
+    type(inputs[1], '2026-01-02')
+    let rows = rowsOf(host)
+    expect(rows).toHaveLength(2)
+    expect(host.textContent).not.toContain('ORD-001')
+
+    type(inputs[2], '2026-01-02')
+    rows = rowsOf(host)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].textContent).toContain('ORD-002')
+    unmount()
+  })
+
   it('أزرار الإجراءات تفتح نوافذ التفاصيل وتحديث الحالة الجديدة بمعرّف الطلب', () => {
     const { host, unmount } = mount(<OrdersView />)
     const buttons = Array.from(host.querySelectorAll('button'))
     const details = buttons.find(b => b.textContent.includes('تفاصيل'))
     const update = buttons.find(b => b.textContent.includes('تحديث'))
 
+    // الصف الأول الآن هو الأحدث (ORD-003 بحالة returned)
     click(details)
-    expect(useUiStore.getState().orderDetailsModal).toMatchObject({ open: true, orderId: 'ORD-001' })
+    expect(useUiStore.getState().orderDetailsModal).toMatchObject({ open: true, orderId: 'ORD-003' })
 
     click(update)
-    expect(useUiStore.getState().orderStatusModal).toMatchObject({ open: true, orderId: 'ORD-001', currentStatus: 'new' })
+    expect(useUiStore.getState().orderStatusModal).toMatchObject({ open: true, orderId: 'ORD-003', currentStatus: 'returned' })
 
     const create = buttons.find(b => b.textContent.includes('إنشاء طلب جديد'))
     click(create)

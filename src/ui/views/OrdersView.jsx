@@ -5,7 +5,7 @@
 // الجديدة، مع قراءة البيانات من ordersStore. نوافذ التفاصيل وتحديث الحالة تفتح
 // عبر uiStore (OrderDetailsModal/OrderStatusModal) وتُحدَّث القائمة عند الحفظ.
 // =============================================================================
-import { useMemo, useEffect } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import { ShoppingBag, Search, PlusCircle, Eye, RefreshCcw } from 'lucide-react'
 import Button from '../components/Button.jsx'
 import Input from '../components/Input.jsx'
@@ -93,6 +93,9 @@ function OrdersView() {
   const setStatus = useOrdersStore(s => s.setStatus)
   const refresh = useOrdersStore(s => s.refresh)
 
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+
   // 🔒 V3.43 — الكاشير يرى فواتير اليوم التي أنشأها هو فقط؛ المدير والمحاسب
   // يريان كل الفواتير. تحديد «فواتير اليوم» مقارنة بتاريخ القاهرة (YYYY-MM-DD).
   const role = useAuthStore(s => s.role)
@@ -114,7 +117,10 @@ function OrdersView() {
     )
   }, [orders, role, user, todayCairo])
 
-  const rows = useMemo(() => applyOrderFilters(visibleOrders, search, status), [visibleOrders, search, status])
+  const rows = useMemo(
+    () => applyOrderFilters(visibleOrders, search, status, dateFrom, dateTo),
+    [visibleOrders, search, status, dateFrom, dateTo]
+  )
 
   const openNewOrder = () => useUiStore.getState().openOrderModal()
 
@@ -122,6 +128,7 @@ function OrdersView() {
     <div className="space-y-6 animate-fadeIn v7-view">
       <FilterBar
         icon={<ShoppingBag className="w-6 h-6 text-brand-400" />}
+        cols="sm:grid-cols-2 lg:grid-cols-4"
         title="سجل الطلبات والفواتير"
         subtitle={
           role === 'employee'
@@ -144,6 +151,22 @@ function OrdersView() {
           voiceLabel="بحث صوتي في الطلبات"
         />
         <Select value={status} onChange={setStatus} options={STATUS_OPTIONS} />
+        <Input
+          type="date"
+          label="من تاريخ"
+          value={dateFrom}
+          onChange={setDateFrom}
+          voice={false}
+          max={dateTo || undefined}
+        />
+        <Input
+          type="date"
+          label="إلى تاريخ"
+          value={dateTo}
+          onChange={setDateTo}
+          voice={false}
+          min={dateFrom || undefined}
+        />
       </FilterBar>
 
       <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg v7-table-card">

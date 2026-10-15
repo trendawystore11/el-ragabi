@@ -44,11 +44,25 @@ export const useOrdersStore = create((set, get) => ({
 }))
 
 /**
- * خط التصفية الوحيد (بحث حر + حالة) — نفس منطق V3.26 في orders-view القديم.
+ * خط التصفية الوحيد (بحث حر + حالة + نطاق تاريخ) — نفس منطق V3.26 في orders-view القديم.
  */
-export function applyOrderFilters(orders, search, status) {
+export function applyOrderFilters(orders, search, status, dateFrom = '', dateTo = '') {
   let list = searchOrders(Array.isArray(orders) ? orders : [], search)
   if (status) list = list.filter(o => String(o.status) === status)
+  if (dateFrom) {
+    const from = String(dateFrom)
+    list = list.filter(o => String(o.createdAt || o.date || '').slice(0, 10) >= from)
+  }
+  if (dateTo) {
+    const to = String(dateTo)
+    list = list.filter(o => String(o.createdAt || o.date || '').slice(0, 10) <= to)
+  }
+  // ترتيب الأحدث ← الأقدم حسب التاريخ (createdAt أو date)
+  list = [...list].sort((a, b) => {
+    const ta = (a && (a.createdAt || a.date)) || ''
+    const tb = (b && (b.createdAt || b.date)) || ''
+    return String(tb).localeCompare(String(ta), undefined, { numeric: true })
+  })
   return list
 }
 
