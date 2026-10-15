@@ -17,6 +17,7 @@
 import { getCairoFormattedDate, isIncrementField, resolveIncrementFields, round2 } from '../utils/formatters.js';
 import { storageKey, isOwnKey, isDataKey, isSnapshotKey } from '../client/storage.js';
 import { FALLBACK_FIREBASE_CONFIG as CLIENT_FIREBASE, CLIENT } from '../client/config.js';
+import { BOOTSTRAP_ADMIN_ID, BOOTSTRAP_ADMIN_EMAIL } from './bootstrapIdentity.js';
 
 // V3.50 — إعدادات Firebase تُقرأ من CLIENT_FIREBASE (src/client/config.js) كي يكفي
 // استبدال config.js وحده لتهيئة مشروع Firebase الخاص بالعميل.
@@ -1738,8 +1739,8 @@ export async function forceWipeDatabase(providedAdminPassword = '') {
     //     V3.20 — PASSWORD PRESERVATION: when the logged-in admin IS USR-1001,
     //     the wipe must NOT drop the stored password.
     const usersCol = window.db.collection(window.STORAGE_KEYS.USER);
-    const seedAdmin = { id: 'USR-1001', name: 'المدير العام', email: 'admin@store.com', role: 'admin', createdAt: '2026-07-01T10:00:00Z' };
-    if (currentUserDoc && currentUserDoc.id === 'USR-1001') {
+    const seedAdmin = { id: BOOTSTRAP_ADMIN_ID, name: 'المدير العام', email: BOOTSTRAP_ADMIN_EMAIL, role: 'admin', createdAt: '2026-07-01T10:00:00Z' };
+    if (currentUserDoc && currentUserDoc.id === BOOTSTRAP_ADMIN_ID) {
       // V3.57 — preserve the PBKDF2 credential fields + uid only; never the
       // plaintext password (a wiped DB must never reintroduce a text password).
       if (currentUserDoc.passwordHash && currentUserDoc.passwordSalt) {
@@ -1749,7 +1750,7 @@ export async function forceWipeDatabase(providedAdminPassword = '') {
       if (currentUserDoc.uid) seedAdmin.uid = currentUserDoc.uid;
     }
     const toReSeed = [seedAdmin];
-    if (currentUserDoc && currentUserDoc.id !== 'USR-1001') toReSeed.push(currentUserDoc);
+    if (currentUserDoc && currentUserDoc.id !== BOOTSTRAP_ADMIN_ID) toReSeed.push(currentUserDoc);
     for (const doc of toReSeed) {
       try {
         await usersCol.doc(doc.id).set(doc);
@@ -1779,8 +1780,8 @@ export async function forceWipeDatabase(providedAdminPassword = '') {
   //     no cloud re-seed to fall back on, so the users mirror (just wiped above)
   //     must be restored with the preserved admin account(s) — INCLUDING the
   //     password field — before the auto-reload.
-  const localSeed = { id: 'USR-1001', name: 'المدير العام', email: 'admin@store.com', role: 'admin', createdAt: '2026-07-01T10:00:00Z' };
-  if (currentUserDoc && currentUserDoc.id === 'USR-1001') {
+  const localSeed = { id: BOOTSTRAP_ADMIN_ID, name: 'المدير العام', email: BOOTSTRAP_ADMIN_EMAIL, role: 'admin', createdAt: '2026-07-01T10:00:00Z' };
+  if (currentUserDoc && currentUserDoc.id === BOOTSTRAP_ADMIN_ID) {
     // V3.57 — preserve PBKDF2 credentials + uid (never plaintext password).
     if (currentUserDoc.passwordHash && currentUserDoc.passwordSalt) {
       localSeed.passwordHash = currentUserDoc.passwordHash;
@@ -1789,7 +1790,7 @@ export async function forceWipeDatabase(providedAdminPassword = '') {
     if (currentUserDoc.uid) localSeed.uid = currentUserDoc.uid;
   }
   const localSeeds = [localSeed];
-  if (currentUserDoc && currentUserDoc.id !== 'USR-1001') localSeeds.push(currentUserDoc);
+  if (currentUserDoc && currentUserDoc.id !== BOOTSTRAP_ADMIN_ID) localSeeds.push(currentUserDoc);
   try {
     window.firestoreCache[window.STORAGE_KEYS.USER] = localSeeds;
     localStorage.setItem(storageKey('data_' + window.STORAGE_KEYS.USER), JSON.stringify(localSeeds));

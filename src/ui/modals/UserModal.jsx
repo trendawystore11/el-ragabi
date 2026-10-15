@@ -16,6 +16,7 @@ import Button from '../components/Button.jsx'
 import { useUiStore } from '../state/uiStore.js'
 import { showToast } from '../components/toastStore.js'
 import { useAuthStore } from '@/state/authStore'
+import { BOOTSTRAP_ADMIN_ID } from '@/services/bootstrapIdentity.js'
 
 const ROLE_OPTIONS = [
   { value: 'employee', label: 'كاشير / موظف مبيعات (Cashier / Sales)' },
@@ -45,7 +46,7 @@ function UserModalInner() {
     typeof window !== 'undefined' && window.getCurrentUser ? window.getCurrentUser() : null
   const isMainAdmin =
     !!user &&
-    (user.id === 'USR-1001' ||
+    (user.id === BOOTSTRAP_ADMIN_ID ||
       (currentUser &&
         user.email &&
         ((currentUser.email || '')).toLowerCase() === ((user.email || '')).toLowerCase()))

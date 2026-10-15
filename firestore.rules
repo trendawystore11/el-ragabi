@@ -19,6 +19,18 @@ service cloud.firestore {
     // تغيير جديد في هذا الملف.
     // =====================================================================
 
+    // V3.70 — BOOTSTRAP IDENTITY (يجب أن يطابق تطبيق العميل)
+    // ---------------------------------------------------------------------
+    // يُزرع أول مدير على مشروع فارغ ببريد/معرّف ثابتين. التطبيق يقرأهما من
+    // متغيرات البناء (VITE_BOOTSTRAP_ADMIN_EMAIL / VITE_BOOTSTRAP_ADMIN_ID —
+    // انظر src/services/bootstrapIdentity.js). قواعد Firestore لا تقرأ متغيرات
+    // بيئة، فالنصّان أدناه هما القيم الفعلية لهذا العميل:
+    //     البريد  : 'admin@store.com'  (في isSeedUserBootstrap ×2, isFirstBootstrap, isBootstrapMarkerWrite)
+    //     المعرّف : 'USR-1001'         (بالمقارنة مع docId)
+    // لتغييرهما لعميل جديد: (1) اضبط VITE_BOOTSTRAP_ADMIN_EMAIL/ID في البناء
+    // (GitHub Actions secrets)، ثم (2) استبدل النصّين هنا بنفس القيمتين.
+    // =====================================================================
+
     function isSignedIn() {
       return request.auth != null;
     }

@@ -39,6 +39,7 @@ import { generateAutoId, getCairoFormattedDate } from '../utils/formatters.js';
 import { storageKey } from '../client/storage.js';
 import { DEFAULT_CONFIG as CLIENT_SYNC, SHEETS_SYNC_CONFIG } from '../client/config.js';
 import { generateSalt, hashPassword } from './auth.js';
+import { BOOTSTRAP_ADMIN_ID } from './bootstrapIdentity.js';
 import { escapeHtml, escapeAttr } from '../utils/escapeHtml.js';
 
 const NS = window.GoogleSheetsSync = window.GoogleSheetsSync || {};
@@ -1070,7 +1071,7 @@ async function applyUser(row, existing) {
     const dup = window.getUsers().find(u => u.id !== id && u.email && String(u.email).trim().toLowerCase() === norm);
     if (dup) throw new Error('بريد إلكتروني مسجل بالفعل لمستخدم آخر');
   }
-  if (id === 'USR-1001' && payload.role && payload.role !== (existing.role || 'admin')) {
+  if (id === BOOTSTRAP_ADMIN_ID && payload.role && payload.role !== (existing.role || 'admin')) {
     notes.push('صلاحية المدير العام الرئيسي محمية');
     delete payload.role;
   }

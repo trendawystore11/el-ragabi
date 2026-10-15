@@ -10,13 +10,14 @@ import { generateAutoId, getCairoFormattedDate } from '../utils/formatters.js';
 import { storageKey, clearDataMirrors } from '../client/storage.js';
 import { FALLBACK_FIREBASE_CONFIG, fetchOwnUserDocFromCloud } from './db.js';
 import { FALLBACK_FIREBASE_CONFIG as CLIENT_FIREBASE_CFG } from '../client/config.js';
+import { BOOTSTRAP_ADMIN_ID, BOOTSTRAP_ADMIN_EMAIL } from './bootstrapIdentity.js';
 
 const AUTH_STORAGE_KEY = storageKey('user_session');
 const USER_CACHE_KEY = storageKey('user_cache');
 
 // Clean Slate Admin Primary Account
 const INITIAL_USERS = [
-  { id: 'USR-1001', name: 'المدير العام', email: 'admin@store.com', role: 'admin', createdAt: '2026-07-01T10:00:00Z' }
+  { id: BOOTSTRAP_ADMIN_ID, name: 'المدير العام', email: BOOTSTRAP_ADMIN_EMAIL, role: 'admin', createdAt: '2026-07-01T10:00:00Z' }
 ];
 
 // =============================================================================
@@ -237,7 +238,7 @@ async function healMissingStaffDoc(fbUid, email, resolvedUser) {
   if (!userDoc && resolvedUser && resolvedUser.id) userDoc = resolvedUser;
   if (!userDoc || !userDoc.id) return false;
 
-  const role = (userDoc.role === 'admin' || userDoc.id === 'USR-1001') ? 'admin' : (userDoc.role || 'employee');
+  const role = (userDoc.role === 'admin' || userDoc.id === BOOTSTRAP_ADMIN_ID) ? 'admin' : (userDoc.role || 'employee');
 
   const docPayload = {
     email: userDoc.email || email,
@@ -559,12 +560,12 @@ export async function login(email, password) {
         // so we create users/USR-1001 (with uid) BEFORE the staff self-heal.
         // The rules allow this single, exact write only while both users and
         // staff are completely empty — after that the bootstrap is closed.
-        if (user && user.id === 'USR-1001' && !userDocExists && typeof window.db.collection === 'function') {
+        if (user && user.id === BOOTSTRAP_ADMIN_ID && !userDocExists && typeof window.db.collection === 'function') {
           try {
-            await window.db.collection('users').doc('USR-1001').set({
-              id: 'USR-1001',
+            await window.db.collection('users').doc(BOOTSTRAP_ADMIN_ID).set({
+              id: BOOTSTRAP_ADMIN_ID,
               name: 'المدير العام',
-              email: 'admin@store.com',
+              email: BOOTSTRAP_ADMIN_EMAIL,
               role: 'admin',
               uid: fbUid,
               createdAt: '2026-07-01T10:00:00Z',
@@ -584,7 +585,7 @@ export async function login(email, password) {
               // بكتابته كأول مدير (بوتستراف) عندما تكون المجموعة فارغة. إن لم
               // يُكتب السجل ولم يكن الحساب مديراً، يبقى الرفض كما في السابق.
               const healed = await healMissingStaffDoc(fbUid, cleanEmail, user);
-              const isPrivileged = !!(user && (user.role === 'admin' || user.id === 'USR-1001'));
+              const isPrivileged = !!(user && (user.role === 'admin' || user.id === BOOTSTRAP_ADMIN_ID));
               if (!healed && !isPrivileged) {
                 throw new Error('حسابك غير مُفعَّل في نظام هذا المتجر — يرجى التواصل مع المدير');
               }
@@ -815,7 +816,7 @@ export async function updateUserAccount(userId, { name, email, password, role })
 
   if (name) payload.name = name.trim();
 
-  if (role && userId === 'USR-1001' && role !== 'admin') {
+  if (role && userId === BOOTSTRAP_ADMIN_ID && role !== 'admin') {
     throw new Error('لا يمكن تغيير صلاحية المدير العام الرئيسي');
   }
 
@@ -989,7 +990,7 @@ export function updateUserRole(userId, newRole) {
   }
   // 🔒 Main Admin & self-protection: the primary admin account (USR-1001) and
   // the currently logged-in account can never be demoted from any JS action.
-  if (userId === 'USR-1001' && newRole !== 'admin') {
+  if (userId === BOOTSTRAP_ADMIN_ID && newRole !== 'admin') {
     throw new Error('لا يمكن تغيير صلاحية المدير العام الرئيسي');
   }
   if (newRole !== 'admin') {
@@ -1014,7 +1015,7 @@ export async function deleteUserAccount(userId) {
   }
   // 🔒 The primary admin account (USR-1001) and the logged-in account can never
   // be deleted from any JS action (prevents self lock-out / losing the owner).
-  if (userId === 'USR-1001') {
+  if (userId === BOOTSTRAP_ADMIN_ID) {
     throw new Error('لا يمكن حذف حساب المدير العام الرئيسي');
   }
   const target = window.getUsers().find(u => u.id === userId);

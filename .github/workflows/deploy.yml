@@ -28,6 +28,8 @@ jobs:
         env:
           VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
           VITE_SYNC_WEBHOOK_URL: ${{ secrets.VITE_SYNC_WEBHOOK_URL }}
+          VITE_BOOTSTRAP_ADMIN_EMAIL: ${{ secrets.VITE_BOOTSTRAP_ADMIN_EMAIL }}
+          VITE_BOOTSTRAP_ADMIN_ID: ${{ secrets.VITE_BOOTSTRAP_ADMIN_ID }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
